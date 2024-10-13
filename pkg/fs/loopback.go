@@ -75,6 +75,7 @@ func NewLoopbackRoot(rootPath, mountPoint string) (*fuse.Server, error) {
 		},
 	}
 
+	// This is  going to block
 	server, err := fs.Mount(mountPoint, newNode(rootData, nil, "", nil), options)
 	if err != nil {
 		return nil, err

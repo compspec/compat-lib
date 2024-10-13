@@ -24,13 +24,22 @@ Build the binary
 make
 ```
 
-Test running with a binary:
+Test running with a binary. Note that since the go program starts the filesystem and we use chroot (outside of it) to launch our job to that root, we have them currently
+separate. If there is a clean way to orchestrate Go running the chroot and binary I'll keep looking for it.
 
 ```bash
-./bin/clib-gen --binary /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/lzcat 
+./bin/clib-gen /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz --help
 ```
 
 Work in progress! The above calls the custom open function, so now we can do a special case for the libraries.
+
+TODO:
+1. Write a wrapper that provides the binary here
+2. Get the pid with &
+3. Run the thing
+4. Then exit.
+
+The wrapper probablhy won't work.
 
 
 ## License
