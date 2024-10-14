@@ -1,45 +1,98 @@
 # Compat Lib
 
-This is a library that prepares artifacts that describe the libraries needed (exposed via ldd) for a specific binary.
-We are going to do several experiments here (as I learn about the space).
+This is a library that provides a compatibility service. The basic idea is that:
 
-## Compatibility Wrapper
+1. Generate compatibility artifacts that describe applications (or containers) of interest
+2. They can live in a local cache or a registry
+3. A service (like a daemon) runs on a node and can evaluate if the node is compatible with the application.
 
-If we wrap a binary, we can:
+To start, we will look at software. We will generate artifacts that describe binaries and the libraries that are needed.
+We will then run the service that will discover the paths provided on the host (exposed via ldd) and be able to quickly answer
+if this is compatible or not. Ironically, as I was exploring this space I realized it was an easy way to cache library locations
+based on soname, which could be used akin to a tool like [spindle](https://github.com/LLNL/spindle). I started testing
+that (see the first idea) but ultimately returned to the compatibility use case because I find it more interesting.
+
+## Usage
+
+For all examples below, build first.
+
+```bash
+make
+```
+
+To make the proto (or re-generate, if necessary):
+
+```bash
+make proto
+```
+
+## Ideas
+
+### 1. Library Discovery Wrapper
+
+> Currently not working to run the binary (operation not permitted)
+
+This was the experiment to generate something akin to spindle. I think it still has feet, I just got interested in other things more. The general idea is that if we wrap a binary, we can:
 
 1. Parse the ELF to get sonames needed
 2. Generate a fuse overlay where everything will be found in one spot (no searching needed)
 3. Then execute the binary.
 
 We would want to see that the exercise of not needing to do the search speeds up that loading time. If it does, it would make sense to pre-package this metadata with the binary for some registry to use.
+This isn't currently working because I can't execute the binary in the proot, so that's the unsolved problem. Here is to test running with a binary. 
 
+```bash
+./bin/fs-gen /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz --help
+```
+
+I tried removing read only (ro) and then it freezes, so that's probably not it.
+
+### 2. Compatibility Wrapper
+
+For this idea, I'll have one entrypoint that can generate a compatibility artifact for some binary. This will just be the .so libraries that are needed for the binary (along with the binary).
+Then I'll have a grpc server / service (or could also be a database) that you run to discover the paths on the node, and you can pull the artifact in advance to check if its compatible. Let's do a dummy 
+case. First, generate the artifact.
+
+```bash
+./bin/compat-gen /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz
+```
+```console
+⭐️ Compatibility Library Generator (clib-gen)
+Preparing to find shared libraries needed for [/home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz]
+{
+  "version": "0.0.1",
+  "attributes": {
+    "llnl.compatlib.executable-name": "xz",
+    "llnl.compatlib.library-name.0": "ld-linux-x86-64.so.2",
+    "llnl.compatlib.library-name.1": "liblzma.so.5",
+    "llnl.compatlib.library-name.2": "libc.so.6"
+  }
+}
+```
+
+Now let's save that to file.
+
+```bash
+./bin/compat-gen --out ./example/compat/xz-libs.json /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz
+```
+
+We could now push that to a registry with ORAS, but we are first going to test with a server. The following should happen:
+
+1. The server starts and is oriented to a mode to parse libraries on the host.
+2. The client is run to request a compatibility check of the artifact against that node (comparing libraries needed)
+3. If all paths can be satisfied, we get an affirmative response, otherwise nope.
+
+To run the server:
+
+```bash
+./bin/compat-server
+```
+```console
+2024/10/13 17:58:41 🧩 starting compatibility server: compatServer v0.0.1
+2024/10/13 17:58:41 server listening: [::]:50051
+```
 
 🚧️ Under Development! 🚧️
-
-## Usage
-
-Build the binary
-
-```bash
-make
-```
-
-Test running with a binary. Note that since the go program starts the filesystem and we use chroot (outside of it) to launch our job to that root, we have them currently
-separate. If there is a clean way to orchestrate Go running the chroot and binary I'll keep looking for it.
-
-```bash
-./bin/clib-gen /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz --help
-```
-
-Work in progress! The above calls the custom open function, so now we can do a special case for the libraries.
-
-TODO:
-1. Write a wrapper that provides the binary here
-2. Get the pid with &
-3. Run the thing
-4. Then exit.
-
-The wrapper probablhy won't work.
 
 
 ## License

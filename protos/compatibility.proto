@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package convergedcomputing.org.grpc.v1;
+option go_package = "github.com/compspec/compat-lib/protos";
+
+service CompatibilityService {
+    rpc CheckCompatibility(CompatRequest) returns (Response);
+}
+
+// A CompatRequest compares a requesting application compatibility metadata with a host node
+// The request can provide the entire artifact as a payload, or a URI to retrieve
+// from a registry
+message CompatRequest {
+    string payload = 1;
+    string uri = 2;
+}
+
+message Response {
+
+    // Registration statuses
+    enum ResultType {
+      UNSPECIFIED = 0;
+      SUCCESS = 1;
+      ERROR = 2;
+      DENIED = 3;
+    }
+    string payload = 1;
+    bool compatible = 2;
+    ResultType status = 3;
+}

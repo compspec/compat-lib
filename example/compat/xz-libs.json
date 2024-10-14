@@ -1,0 +1,9 @@
+{
+  "version": "0.0.1",
+  "attributes": {
+    "llnl.compatlib.executable-name": "xz",
+    "llnl.compatlib.library-name.0": "libc.so.6",
+    "llnl.compatlib.library-name.1": "ld-linux-x86-64.so.2",
+    "llnl.compatlib.library-name.2": "liblzma.so.5"
+  }
+}

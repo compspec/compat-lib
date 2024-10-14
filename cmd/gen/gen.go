@@ -5,70 +5,51 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 
-	"github.com/compspec/compat-lib/pkg/fs"
+	"github.com/compspec/compat-lib/pkg/compat"
 	"github.com/compspec/compat-lib/pkg/generate"
 )
 
 func main() {
 	fmt.Println("⭐️ Compatibility Library Generator (clib-gen)")
-	mountPoint := flag.String("mount-path", "", "Mount path (for control from calling process)")
+	outfile := flag.String("out", "", "Output file path for artifact")
 
 	flag.Parse()
 	args := flag.Args()
+	outPath := *outfile
+
 	if len(args) == 0 {
-		log.Fatalf("You must provide a command (with optional arguments) to run.")
+		log.Fatalf("Please provide the binary you want to generate an artifact for.")
 	}
-	mountPath := *mountPoint
 
 	// Get the full path of the command
 	path := args[0]
 	path, err := filepath.Abs(path)
 	if err != nil {
 		log.Fatalf("Error getting full path: %x", err)
-
 	}
 
 	// This is where we should look them up in some cache
 	fmt.Printf("Preparing to find shared libraries needed for %s\n", args)
-	paths, err := generate.FindSharedLibs(path)
+	libs, err := generate.FindSharedLibs(path)
 	if err != nil {
-		log.Panicf("Error finding shared libraries for %s: %x", path, err)
-	}
-	for _, lib := range paths {
-		fmt.Println(lib)
+		log.Fatalf("Error finding shared libraries for %s: %x", path, err)
 	}
 
-	// Generate the fusefs server
-	compatFS, err := fs.NewCompatFS(mountPath)
+	// Generate the artifact
+	spec := compat.GenerateLibraryArtifact(path, libs)
+	out, err := spec.ToJson()
 	if err != nil {
-		log.Panicf("Cannot generate fuse server: %x", err)
+		log.Fatalf("Issue serializing spec to json: %s", err)
 	}
-	fmt.Println("Mounted!")
-
-	// Removes mount point directory when done
-	defer compatFS.Cleanup()
-
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		compatFS.Server.Unmount()
-	}()
-
-	// Execute the command with proot
-	// Disabled for now - operation not permitted. Removing ro seems to freeze
-	// proot := []string{"proot", "-r", compatFS.MountPoint}
-	//args = append(proot, args...)
-	//call := strings.Join(args, " ")
-	//fmt.Println(call)
-	//err = compatFS.RunCommand(call)
-	//if err != nil {
-	//		log.Panicf("Error running command: %s", err)
-	//}
-	defer compatFS.Server.Unmount()
-	compatFS.Server.Wait()
+	if outPath == "" {
+		fmt.Println(string(out))
+	} else {
+		fmt.Printf("🗒️ Writing to file %s\n", outPath)
+		err = os.WriteFile(outPath, out, 0644)
+		if err != nil {
+			log.Fatalf("Issue writing to output file: %s", err)
+		}
+	}
 }

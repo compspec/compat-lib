@@ -18,16 +18,24 @@ func FindSharedLibs(path string) ([]string, error) {
 	}
 	// FList follows symlink paths
 	// Do this and get the soname
-	sonames := []string{}
+	sonames := map[string]bool{}
 	for _, path := range libs {
 		soname, err := readSoname(path)
 		if err != nil {
 			fmt.Printf("Warning, cannot read soname of %s\n", path)
 			continue
 		}
-		sonames = append(sonames, soname)
+
+		// This just allows us to ensure unique names
+		sonames[soname] = true
 	}
-	return sonames, err
+
+	// Now parse into list
+	sonameList := []string{}
+	for soname := range sonames {
+		sonameList = append(sonameList, soname)
+	}
+	return sonameList, err
 }
 
 // ReadSoname from an ELF file
