@@ -38,14 +38,19 @@ This was the experiment to generate something akin to spindle. I think it still 
 2. Generate a fuse overlay where everything will be found in one spot (no searching needed)
 3. Then execute the binary.
 
-We would want to see that the exercise of not needing to do the search speeds up that loading time. If it does, it would make sense to pre-package this metadata with the binary for some registry to use.
-This isn't currently working because I can't execute the binary in the proot, so that's the unsolved problem. Here is to test running with a binary. 
+We would want to see that the exercise of not needing to do the search speeds up that loading time. If it does, it would make sense to pre-package this metadata with the binary for some registry to use. Here is how to run it with a binary:
 
 ```bash
 ./bin/fs-gen /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz --help
 ```
 
-I tried removing read only (ro) and then it freezes, so that's probably not it.
+This one has a few more paths:
+
+```bash
+./bin/fs-gen /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/hwloc-2.11.1-zuv2etx7sgd5yn6khpblfw6qjh54lpsp/bin/hwloc-ls
+```
+
+Next we would want to add some kind of cache to store file descriptors (or paths) and return something else.
 
 ### 2. Compatibility Wrapper
 

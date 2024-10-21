@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"syscall"
 
+	"github.com/google/shlex"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
@@ -83,43 +83,30 @@ func NewCompatFS(mountPath string) (*CompatFS, error) {
 // separately.
 func (c *CompatFS) RunCommand(command string) error {
 
+	// returns list of strings
+	call, err := shlex.Split(command)
+	if err != nil {
+		return err
+	}
+
+	command, args := call[0], call[1:]
+
 	// Get current working directory to return to
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 
-	// Get the file descriptor to return to later
-	fd, err := os.Open(cwd)
-	if err != nil {
-		return err
-	}
-	defer fd.Close()
-
 	// Setup command, using standard outputs
-	cmd := exec.Command(command)
+	cmd := exec.Command(command, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Dir = cwd
 
-	// Change directory to the new "root" (mountpoint) and call chroot
-	err = syscall.Chdir(c.MountPoint)
-	if err != nil {
-		return err
-	}
-	err = syscall.Chroot(c.MountPoint)
-	if err != nil {
-		return err
-	}
 	err = cmd.Run()
 	if err != nil {
 		return err
 	}
-
-	// Return to previous location
-	err = syscall.Fchdir(int(fd.Fd()))
-	if err != nil {
-		return err
-	}
-	return syscall.Chroot(".")
+	return err
 }

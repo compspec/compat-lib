@@ -3,6 +3,7 @@ module github.com/compspec/compat-lib
 go 1.22
 
 require (
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/hanwen/go-fuse/v2 v2.6.1
 	github.com/opencontainers/image-spec v1.1.0
 	github.com/pkg/errors v0.9.1

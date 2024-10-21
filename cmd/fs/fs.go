@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/compspec/compat-lib/pkg/fs"
@@ -14,7 +15,7 @@ import (
 )
 
 func main() {
-	fmt.Println("⭐️ Compatibility Filesystem (clib-fs)")
+	fmt.Println("⭐️ Compatibility Filesystem (fs-gen)")
 	mountPoint := flag.String("mount-path", "", "Mount path (for control from calling process)")
 
 	flag.Parse()
@@ -34,12 +35,9 @@ func main() {
 
 	// This is where we should look them up in some cache
 	fmt.Printf("Preparing to find shared libraries needed for %s\n", args)
-	paths, err := generate.FindSharedLibs(path)
+	_, err = generate.FindSharedLibs(path)
 	if err != nil {
 		log.Panicf("Error finding shared libraries for %s: %x", path, err)
-	}
-	for _, lib := range paths {
-		fmt.Println(lib)
 	}
 
 	// Generate the fusefs server
@@ -60,15 +58,14 @@ func main() {
 	}()
 
 	// Execute the command with proot
-	// Disabled for now - operation not permitted. Removing ro seems to freeze
-	// proot := []string{"proot", "-r", compatFS.MountPoint}
-	//args = append(proot, args...)
-	//call := strings.Join(args, " ")
-	//fmt.Println(call)
-	//err = compatFS.RunCommand(call)
-	//if err != nil {
-	//		log.Panicf("Error running command: %s", err)
-	//}
+	proot := []string{"proot", "-S", compatFS.MountPoint, "-0"}
+	args = append(proot, args...)
+	call := strings.Join(args, " ")
+	fmt.Println(call)
+	err = compatFS.RunCommand(call)
+	if err != nil {
+		log.Panicf("Error running command: %s", err)
+	}
 	defer compatFS.Server.Unmount()
 	compatFS.Server.Wait()
 }

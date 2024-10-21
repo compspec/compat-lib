@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -19,14 +20,33 @@ type CompatLoopbackNode struct {
 	fs.LoopbackNode
 }
 
+func (n *CompatLoopbackNode) path() string {
+	path := n.Path(n.root())
+	return filepath.Join(n.RootData.Path, path)
+}
+
+// path returns the full path to the file in the underlying file system.
+func (n *CompatLoopbackNode) root() *fs.Inode {
+	var rootNode *fs.Inode
+	if n.RootData.RootNode != nil {
+		rootNode = n.RootData.RootNode.EmbeddedInode()
+	} else {
+		rootNode = n.Root()
+	}
+
+	return rootNode
+}
+
 func (n *CompatLoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	fmt.Println("CUSTOM OPEN FOR %s with flags %s\n", ctx, flags)
+	flags = flags &^ syscall.O_APPEND
+	p := n.path()
+	fmt.Printf("CUSTOM OPEN FOR %s with flags %d\n", p, flags)
 	fh, flags, errno := n.LoopbackNode.Open(ctx, flags)
 	return fh, flags, errno
 }
 
 func (n *CompatLoopbackNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
-	fmt.Println("CUSTOM CREATE FOR %s with flags %s\n", name, flags)
+	fmt.Printf("CUSTOM CREATE FOR %s with flags %d\n", name, flags)
 	inode, fh, flags, errno := n.LoopbackNode.Create(ctx, name, flags, mode, out)
 	return inode, fh, flags, errno
 }
