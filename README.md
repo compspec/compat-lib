@@ -30,13 +30,15 @@ make proto
 
 ### 1. Library Discovery Wrapper
 
-> Currently not working to run the binary (operation not permitted)
+> Figure out what shared libraries are needed via an open intercept
 
-This was the experiment to generate something akin to spindle. I think it still has feet, I just got interested in other things more. The general idea is that if we wrap a binary, we can:
+This was the experiment to generate something akin to spindle. I think it still has feet, I just got interested in other things more. Next I need to create some kind of cache. We can:
 
-1. Parse the ELF to get sonames needed
+1. Parse the ELF to get sonames needed (if we want to see them in advance, this isn't actually necessary)
 2. Generate a fuse overlay where everything will be found in one spot (no searching needed)
-3. Then execute the binary.
+3. Write a create function for a loopback filesystem that will intercept calls
+4. Use proot (or similar, I used proot since I don't want to use root) to execute a command to our mounted filesystem
+5. Then execute the binary, see the open calls.
 
 We would want to see that the exercise of not needing to do the search speeds up that loading time. If it does, it would make sense to pre-package this metadata with the binary for some registry to use. Here is how to run it with a binary:
 
@@ -51,6 +53,8 @@ This one has a few more paths:
 ```
 
 Next we would want to add some kind of cache to store file descriptors (or paths) and return something else.
+This could also be used in a compatibility context to figure out what a binary needs before running it, and give it to a scheduler,
+but I'm not sure that use case is of interest.
 
 ### 2. Compatibility Wrapper
 
