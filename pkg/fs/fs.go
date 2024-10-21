@@ -79,8 +79,6 @@ func NewCompatFS(mountPath string) (*CompatFS, error) {
 }
 
 // RunComand to the fuse filesystem with chroot
-// Note that this isn't working - we are running chroot and the command
-// separately.
 func (c *CompatFS) RunCommand(command string) error {
 
 	// returns list of strings
