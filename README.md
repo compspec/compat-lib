@@ -125,12 +125,14 @@ Test running in a container, and binding the binary!
 docker run -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1 lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
 
 # Now record!
-docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/fuse --cap-add SYS_ADMIN -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1-fuse /compat/fs-record --out /compat/lammps-run.out lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
+docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/fuse --cap-add SYS_ADMIN -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1-fuse /compat/fs-record --out /compat/lammps-run-1.out lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
+
+# With a temporary file in the PWD
+docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/fuse --cap-add SYS_ADMIN -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1-fuse /compat/fs-record --out-dir /compat lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
 ```
 
 ## TODO
 
-- Need to have way for container to exit
 - Discuss events to record, format of output
 - Then I'd like to do Levenstein Distance (insertions, deletions, subs) with dynamic programming. We can also do smith waterman (longest substring) with paths. How we do that is up to us - can limit to specific kind of file operation (e.g., lookup).
 - For patterns, we might see access of the same file multiple times. How should we account for timestamps too?

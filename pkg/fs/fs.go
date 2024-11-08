@@ -45,6 +45,10 @@ func (c *CompatFS) Cleanup() {
 	// Clean up mount point directory
 	fmt.Printf("Cleaning up %s...\n", c.MountPoint)
 	os.RemoveAll(c.MountPoint)
+	if outfile != "" {
+		fmt.Printf("Output file written to %s\n", outfile)
+		os.Chmod(outfile, 0644)
+	}
 }
 
 // NewCompatFS returns a new wrapper to a fuse.Server
