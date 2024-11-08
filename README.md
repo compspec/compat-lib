@@ -118,6 +118,26 @@ Here is how to customize the output file name:
 ./bin/fs-record --out ./example/compat/xz-libs.txt /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz
 ```
 
+Test running in a container, and binding the binary!
+
+```bash
+# Test running lammps first
+docker run -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1 lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
+
+# Now record!
+docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/fuse --cap-add SYS_ADMIN -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1-fuse /compat/fs-record --out /compat/lammps-run.out lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
+```
+
+## TODO
+
+- Need to have way for container to exit
+- Discuss events to record, format of output
+- Then I'd like to do Levenstein Distance (insertions, deletions, subs) with dynamic programming. We can also do smith waterman (longest substring) with paths. How we do that is up to us - can limit to specific kind of file operation (e.g., lookup).
+- For patterns, we might see access of the same file multiple times. How should we account for timestamps too?
+- We need to be prepared for reax to not exist as an example across tags. What should we do?
+
+What a cool problem!
+
 🚧️ Under Development! 🚧️
 
 
