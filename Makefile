@@ -16,6 +16,7 @@ build:
 	go build -o ./bin/compat-gen cmd/gen/gen.go
 	go build -o ./bin/compat-server cmd/server/server.go
 	go build -o ./bin/compat-cli cmd/client/client.go
+	go build -o ./bin/fs-record cmd/record/record.go
 
 .PHONY: protoc
 protoc: $(LOCALBIN)

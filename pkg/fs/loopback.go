@@ -15,6 +15,7 @@ import (
 
 // We need to implement a custom LoopbackNode Open function
 var _ = (fs.NodeOpener)((*CompatLoopbackNode)(nil))
+var _ = (fs.NodeLookuper)((*CompatLoopbackNode)(nil))
 
 type CompatLoopbackNode struct {
 	fs.LoopbackNode
@@ -23,6 +24,33 @@ type CompatLoopbackNode struct {
 func (n *CompatLoopbackNode) path() string {
 	path := n.Path(n.root())
 	return filepath.Join(n.RootData.Path, path)
+}
+
+func (n *CompatLoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	p := filepath.Join(n.path(), name)
+	st := syscall.Stat_t{}
+	err := syscall.Lstat(p, &st)
+	if err != nil {
+		return nil, fs.ToErrno(err)
+	}
+	logEvent("Lookup", p)
+	out.Attr.FromStat(&st)
+	node := newNode(n.RootData, n.EmbeddedInode(), name, &st)
+	ch := n.NewInode(ctx, node, idFromStat(n.RootData, &st))
+	return ch, 0
+}
+
+// https://github.com/hanwen/go-fuse/blob/f5b6d1b67f4a4d0f4c3c88b4491185b3685e8383/fs/loopback.go#L48
+func idFromStat(rootNode *fs.LoopbackRoot, st *syscall.Stat_t) fs.StableAttr {
+	swapped := (uint64(st.Dev) << 32) | (uint64(st.Dev) >> 32)
+	swappedRootDev := (rootNode.Dev << 32) | (rootNode.Dev >> 32)
+	return fs.StableAttr{
+		Mode: uint32(st.Mode),
+		Gen:  1,
+		// This should work well for traditional backing FSes,
+		// not so much for other go-fuse FS-es
+		Ino: (swapped ^ swappedRootDev) ^ st.Ino,
+	}
 }
 
 // path returns the full path to the file in the underlying file system.
@@ -40,13 +68,15 @@ func (n *CompatLoopbackNode) root() *fs.Inode {
 func (n *CompatLoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	flags = flags &^ syscall.O_APPEND
 	p := n.path()
+	logEvent("Open", p)
 	fmt.Printf("CUSTOM OPEN FOR %s with flags %d\n", p, flags)
 	fh, flags, errno := n.LoopbackNode.Open(ctx, flags)
 	return fh, flags, errno
 }
 
 func (n *CompatLoopbackNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
-	fmt.Printf("CUSTOM CREATE FOR %s with flags %d\n", name, flags)
+	logEvent("Create", name)
+	//	fmt.Printf("CUSTOM CREATE FOR %s with flags %d\n", name, flags)
 	inode, fh, flags, errno := n.LoopbackNode.Create(ctx, name, flags, mode, out)
 	return inode, fh, flags, errno
 }
@@ -60,7 +90,8 @@ func newNode(rootData *fs.LoopbackRoot, parent *fs.Inode, name string, st *sysca
 	return n
 }
 
-func NewLoopbackRoot(rootPath, mountPoint string) (*fuse.Server, error) {
+// InitLoopbackRoot creates a fuse.Server
+func (compat *CompatFS) InitLoopbackRoot(rootPath, mountPoint string, updates chan Update) error {
 
 	rootData := &fs.LoopbackRoot{
 		NewNode: newNode,
@@ -97,8 +128,6 @@ func NewLoopbackRoot(rootPath, mountPoint string) (*fuse.Server, error) {
 
 	// This is  going to block
 	server, err := fs.Mount(mountPoint, newNode(rootData, nil, "", nil), options)
-	if err != nil {
-		return nil, err
-	}
-	return server, nil
+	compat.Server = server
+	return err
 }

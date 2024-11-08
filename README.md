@@ -101,6 +101,23 @@ To run the server:
 2024/10/13 17:58:41 server listening: [::]:50051
 ```
 
+### 3. Application Recorder
+
+Here is a third use case, which is a modified example of the above. We would want to do the following:
+
+1. Record the file access of running some HPC application (in a container or not) meaning paths and timestamps since start.
+2. Record file access of a set of "the same" app over time to assess differences.
+
+```bash
+./bin/fs-record /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz --help
+```
+
+Here is how to customize the output file name:
+
+```bash
+./bin/fs-record --out ./example/compat/xz-libs.txt /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz
+```
+
 🚧️ Under Development! 🚧️
 
 
