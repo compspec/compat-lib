@@ -11,12 +11,14 @@ import (
 	"syscall"
 
 	"github.com/compspec/compat-lib/pkg/fs"
-	"github.com/compspec/compat-lib/pkg/generate"
 )
 
 func main() {
-	fmt.Println("⭐️ Compatibility Filesystem (fs-gen)")
+	fmt.Println("⭐️ Filesystem Recorder (fs-record)")
+
 	mountPoint := flag.String("mount-path", "", "Mount path (for control from calling process)")
+	outfile := flag.String("out", "", "Output file to write events")
+	outdir := flag.String("out-dir", "", "Output directory to write events")
 
 	flag.Parse()
 	args := flag.Args()
@@ -27,27 +29,26 @@ func main() {
 
 	// Get the full path of the command
 	path := args[0]
-	path, err := filepath.Abs(path)
+	_, err := filepath.Abs(path)
 	if err != nil {
 		log.Fatalf("Error getting full path: %x", err)
 
 	}
+	args[0] = path
 
-	// This is where we should look them up in some cache
-	fmt.Printf("Preparing to find shared libraries needed for %s\n", args)
-	_, err = generate.FindSharedLibs(path)
-	if err != nil {
-		log.Panicf("Error finding shared libraries for %s: %x", path, err)
+	// We require a recording file for the recorder
+	if *outfile == "" {
+		*outfile = fs.GetEventFile(*outdir)
 	}
-
 	// Generate the fusefs server
-	compatFS, err := fs.NewCompatFS(mountPath, "")
+	compatFS, err := fs.NewCompatFS(mountPath, *outfile)
 	if err != nil {
 		log.Panicf("Cannot generate fuse server: %x", err)
 	}
 	fmt.Println("Mounted!")
 
 	// Removes mount point directory when done
+	// Also fixes permission of file
 	defer compatFS.Cleanup()
 
 	c := make(chan os.Signal)
@@ -66,6 +67,7 @@ func main() {
 	if err != nil {
 		log.Panicf("Error running command: %s", err)
 	}
-	defer compatFS.Server.Unmount()
-	compatFS.Server.Wait()
+	// Unlike compat, explicitly close after command is done running
+	fmt.Println("Command is done running")
+	compatFS.Server.Unmount()
 }

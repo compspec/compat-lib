@@ -26,9 +26,17 @@ const (
 	originalFS = "/"
 )
 
+// Generic update type to be parsed later
+type Update struct {
+	Message string
+}
+
 type CompatFS struct {
 	Server     *fuse.Server
 	MountPoint string
+
+	// Output file, if defined, to save events
+	Outfile string
 }
 
 // Cleanup removes the mountpoint directory
@@ -37,16 +45,27 @@ func (c *CompatFS) Cleanup() {
 	// Clean up mount point directory
 	fmt.Printf("Cleaning up %s...\n", c.MountPoint)
 	os.RemoveAll(c.MountPoint)
+	if outfile != "" {
+		fmt.Printf("Output file written to %s\n", outfile)
+		os.Chmod(outfile, 0644)
+	}
 }
 
 // NewCompatFS returns a new wrapper to a fuse.Server
 // We mount a fusefs to a temporary directory
 // The server returned (if not nil) needs to be
 // correctly handled - see how it is used here in the library
-func NewCompatFS(mountPath string) (*CompatFS, error) {
+// If recorder is true, we instantiate a recording base
+func NewCompatFS(
+	mountPath string,
+	recordFile string,
+) (*CompatFS, error) {
 
 	// Create a Compat Filesystem with defaults
-	compat := CompatFS{}
+	compat := CompatFS{Outfile: outfile}
+
+	// Set the global log file in case we are recording events
+	outfile = recordFile
 
 	// TODO keep track of cpu and memory profiles
 	if mountPath == "" {
@@ -65,16 +84,18 @@ func NewCompatFS(mountPath string) (*CompatFS, error) {
 			return nil, err
 		}
 	}
+	// Create generic updates channel
+	updates := make(chan Update)
 
 	fmt.Printf("Mount directory %s\n", mountPath)
 	compat.MountPoint = mountPath
 
 	// Mount the content of the rootFS (originalFS) at the mount point
-	server, err := NewLoopbackRoot(originalFS, mountPath)
+	// Pass in a channel to receive updates from
+	err = compat.InitLoopbackRoot(originalFS, mountPath, updates)
 	if err != nil {
 		return nil, err
 	}
-	compat.Server = server
 	return &compat, nil
 }
 
