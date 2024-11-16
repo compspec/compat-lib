@@ -1,4 +1,4 @@
-package fs
+package logger
 
 import (
 	"log"
@@ -9,10 +9,18 @@ import (
 
 // logger will record events for the recorder to file
 var (
-	logger  *log.Logger
-	once    sync.Once
-	outfile string
+	logger *log.Logger
+	once   sync.Once
+
+	// Default output file available for setting externally
+	Outfile string
 )
+
+// SetOutfile can be called from an external class to set
+// the global variable.
+func SetOutfile(outfile string) {
+	Outfile = outfile
+}
 
 // GetEventFile gets an event file
 func GetEventFile(outdir string) string {
@@ -38,9 +46,9 @@ func GetEventFile(outdir string) string {
 }
 
 // logEvent logs the event to file with a unix nano timeseconds
-func logEvent(event, path string) {
+func LogEvent(event, path string) {
 	// Cut out early if we didn't define a log file
-	if outfile == "" {
+	if Outfile == "" {
 		return
 	}
 	logger := getLogger()
@@ -49,7 +57,7 @@ func logEvent(event, path string) {
 
 func getLogger() *log.Logger {
 	once.Do(func() {
-		file, err := os.OpenFile(outfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		file, err := os.OpenFile(Outfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			log.Fatal(err)
 		}

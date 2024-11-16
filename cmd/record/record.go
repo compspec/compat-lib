@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/compspec/compat-lib/pkg/fs"
+	"github.com/compspec/compat-lib/pkg/logger"
 )
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 
 	// We require a recording file for the recorder
 	if *outfile == "" {
-		*outfile = fs.GetEventFile(*outdir)
+		*outfile = logger.GetEventFile(*outdir)
 	}
 	// Generate the fusefs server
 	compatFS, err := fs.NewCompatFS(mountPath, *outfile)
@@ -64,6 +65,9 @@ func main() {
 	call := strings.Join(args, " ")
 	fmt.Println(call)
 	err = compatFS.RunCommand(call)
+
+	// Record the end of command event.
+	logger.LogEvent("Complete", logger.Outfile)
 	if err != nil {
 		log.Panicf("Error running command: %s", err)
 	}
