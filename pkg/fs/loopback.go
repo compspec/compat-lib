@@ -2,13 +2,13 @@ package fs
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/compspec/compat-lib/pkg/logger"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -33,7 +33,7 @@ func (n *CompatLoopbackNode) Lookup(ctx context.Context, name string, out *fuse.
 	if err != nil {
 		return nil, fs.ToErrno(err)
 	}
-	logEvent("Lookup", p)
+	logger.LogEvent("Lookup", p)
 	out.Attr.FromStat(&st)
 	node := newNode(n.RootData, n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, idFromStat(n.RootData, &st))
@@ -68,15 +68,13 @@ func (n *CompatLoopbackNode) root() *fs.Inode {
 func (n *CompatLoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	flags = flags &^ syscall.O_APPEND
 	p := n.path()
-	logEvent("Open", p)
-	fmt.Printf("CUSTOM OPEN FOR %s with flags %d\n", p, flags)
+	logger.LogEvent("Open", p)
 	fh, flags, errno := n.LoopbackNode.Open(ctx, flags)
 	return fh, flags, errno
 }
 
 func (n *CompatLoopbackNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
-	logEvent("Create", name)
-	//	fmt.Printf("CUSTOM CREATE FOR %s with flags %d\n", name, flags)
+	logger.LogEvent("Create", name)
 	inode, fh, flags, errno := n.LoopbackNode.Create(ctx, name, flags, mode, out)
 	return inode, fh, flags, errno
 }

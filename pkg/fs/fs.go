@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/compspec/compat-lib/pkg/logger"
 	"github.com/google/shlex"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -45,9 +46,9 @@ func (c *CompatFS) Cleanup() {
 	// Clean up mount point directory
 	fmt.Printf("Cleaning up %s...\n", c.MountPoint)
 	os.RemoveAll(c.MountPoint)
-	if outfile != "" {
-		fmt.Printf("Output file written to %s\n", outfile)
-		os.Chmod(outfile, 0644)
+	if logger.Outfile != "" {
+		fmt.Printf("Output file written to %s\n", logger.Outfile)
+		os.Chmod(logger.Outfile, 0644)
 	}
 }
 
@@ -62,10 +63,10 @@ func NewCompatFS(
 ) (*CompatFS, error) {
 
 	// Create a Compat Filesystem with defaults
-	compat := CompatFS{Outfile: outfile}
+	compat := CompatFS{Outfile: logger.Outfile}
 
 	// Set the global log file in case we are recording events
-	outfile = recordFile
+	logger.SetOutfile(recordFile)
 
 	// TODO keep track of cpu and memory profiles
 	if mountPath == "" {
