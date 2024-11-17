@@ -1,0 +1,49 @@
+name: compatlib tag and release
+
+on:
+  # On demand releases
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set tag
+        run: |
+          today=$(printf '%(%Y-%m-%d)T\n' -1)
+          echo $today
+          echo "tag=${today}" >> ${GITHUB_ENV}
+
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ^1.22
+      - name: Install dependencies
+        run: |
+          export PATH=$PWD/bin:$PATH
+          mkdir -p ./bin
+          go build -o ./bin/fs-gen cmd/fs/fs.go
+          go build -o ./bin/compat-gen cmd/gen/gen.go
+          go build -o ./bin/compat-server cmd/server/server.go
+          go build -o ./bin/compat-cli cmd/client/client.go
+          go build -o ./bin/fs-record cmd/record/record.go
+          
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: compat-lib ${{ env.tag }}
+          tag_name: ${{ env.tag }}
+          body: "compat-lib release ${{ env.tag }}"
+          files: |
+            bin/fs-gen
+            bin/compat-gen
+            bin/compat-server
+            bin/compat-cli
+            bin/fs-record
+        env:
+          GITHUB_REPOSITORY: compspec/compat-lib
+
