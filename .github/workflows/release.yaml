@@ -31,7 +31,7 @@ jobs:
           go build -o ./bin/compat-server cmd/server/server.go
           go build -o ./bin/compat-cli cmd/client/client.go
           go build -o ./bin/fs-record cmd/record/record.go
-          
+
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
@@ -46,4 +46,3 @@ jobs:
             bin/fs-record
         env:
           GITHUB_REPOSITORY: compspec/compat-lib
-

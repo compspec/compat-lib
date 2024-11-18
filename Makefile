@@ -10,7 +10,7 @@ $(LOCALBIN):
 all: build
 
 .PHONY: build
-build: 
+build:
 	mkdir -p ./bin
 	go build -o ./bin/fs-gen cmd/fs/fs.go
 	go build -o ./bin/compat-gen cmd/gen/gen.go
