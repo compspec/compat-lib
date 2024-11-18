@@ -1,2 +1,8 @@
 bin
 vendor
+__pycache__
+compatlib.egg-info
+env
+build
+dist
+.eggs
