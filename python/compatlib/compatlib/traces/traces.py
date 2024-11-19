@@ -1,3 +1,4 @@
+import json
 import os
 
 import pandas
@@ -42,6 +43,84 @@ class TraceSet:
                 raise ValueError(f"{filename} does not exist")
             events.append(filename)
         self.files = events
+
+    def to_perfetto(self, outfile):
+        """
+        Generate perfetto json output file for events.
+
+        # See format at:
+        # https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview?tab=t.0
+        """
+        df = self.to_dataframe()
+
+        # Give an arbitrary id to each filename
+        ids = {}
+        count = 0
+
+        # We will thread the pids as the different runs of lammps,
+        # and the thread ids as the library ids
+
+        # TODO: this can be cleaned up and moved into own perfetto.py
+        # I won't do this until I've added the close event and tested again
+        with open(outfile, "w") as fd:
+            fd.write("[")
+
+            for pid, tag in enumerate(df.basename.unique()):
+                subset = df[df.basename == tag]
+
+                # Subtract the minimum timestamp for each run so we always start at 0
+                start_time = subset.timestamp.min()
+                subset.loc[:, "timestamp"] = subset.timestamp - start_time
+
+                for row in subset.iterrows():
+                    # Get a faux process id
+                    if row[1].normalized_path not in ids:
+                        ids[row[1].normalized_path] = count
+                        count += 1
+                    identifier = ids[row[1].normalized_path]
+                    if row[1].ms_in_state is not None:
+                        fd.write(
+                            json.dumps(
+                                {
+                                    "name": row[1].normalized_path,
+                                    "pid": pid,
+                                    "tid": identifier,
+                                    "ts": row[1].timestamp,
+                                    "dur": row[1].ms_in_state,
+                                    # Beginning of phase event
+                                    "ph": "X",
+                                    "cat": tag,
+                                    "args": {
+                                        "name": row[1].normalized_path,
+                                        "path": row[1].path,
+                                        "result": row[1].basename,
+                                        "function": row[1].function,
+                                    },
+                                }
+                            )
+                        )
+                    else:
+                        fd.write(
+                            json.dumps(
+                                {
+                                    "name": row[1].normalized_path,
+                                    "pid": pid,
+                                    "tid": identifier,
+                                    "ts": row[1].timestamp,
+                                    # Beginning of phase event
+                                    "ph": "B",
+                                    "cat": tag,
+                                    "args": {
+                                        "name": row[1].normalized_path,
+                                        "path": row[1].path,
+                                        "result": row[1].basename,
+                                        "function": row[1].function,
+                                    },
+                                }
+                            )
+                        )
+                    fd.write("\n")
+            fd.write("]")
 
     def iter_events(self, operation="Open"):
         """

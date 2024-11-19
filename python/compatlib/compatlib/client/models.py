@@ -24,6 +24,8 @@ def main(args, parser, extra, subparser):
 
     # A trace set is a collection of event files
     traceset = TraceSet(events)
+    if not traceset.files:
+        logger.exit("No event files were found.")
     df = traceset.to_dataframe()
 
     # Define output files and paths

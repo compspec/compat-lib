@@ -24,6 +24,11 @@ def read_file(filename):
     return content
 
 
+def write_json(content, filename):
+    with open(filename, "w") as fd:
+        fd.write(json.dumps(content, indent=4))
+
+
 def write_file(content, filename, executable=False):
     with open(filename, "w") as fd:
         fd.write(content)

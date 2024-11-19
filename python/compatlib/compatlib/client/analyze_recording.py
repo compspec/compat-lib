@@ -23,6 +23,8 @@ def main(args, parser, extra, subparser):
 
     # A trace set is a collection of event files
     traceset = TraceSet(events)
+    if not traceset.files:
+        logger.exit("No event files were found.")
 
     # Define output files and paths
     image_outdir = os.path.join(args.outdir, "img")
