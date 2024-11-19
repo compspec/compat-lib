@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import stat
 import tempfile
 from contextlib import contextmanager
@@ -94,6 +95,28 @@ def pretty_print_list(listing):
         if len(listing) > 1 and i != len(listing) - 1:
             result += "\n"
     return result.strip(",")
+
+
+def recursive_find(base, pattern="*.*"):
+    """
+    Recursively find and yield directories matching a glob pattern.
+    """
+    for root, dirnames, filenames in os.walk(base):
+        for dirname in dirnames:
+            if not re.search(pattern, dirname):
+                continue
+            yield os.path.join(root, dirname)
+
+
+def recursive_find_files(base, pattern="*.*"):
+    """
+    Recursively find and yield directories matching a glob pattern.
+    """
+    for root, _, filenames in os.walk(base):
+        for filename in filenames:
+            if not re.search(pattern, filename):
+                continue
+            yield os.path.join(root, filename)
 
 
 def normalize_soname(path):

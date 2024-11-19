@@ -58,7 +58,7 @@ docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/
 docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/fuse --cap-add SYS_ADMIN -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1-fuse /compat/fs-record --out-dir /compat lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
 ```
 
-We provide functions in Python under [python/compatlib](python/compatlib) for parsing and generating models for the event files. You can see early work [in the lammps-time repository](https://github.com/converged-computing/lammps-time/tree/main/fuse/analysis) to do this that has since been turned into the library here. The next stage of work for that project will use the library here.
+We provide functions in Python under [python/compatlib](python/compatlib) for parsing and generating models for the event files. You can see using the library [here](https://github.com/converged-computing/lammps-time/tree/main/experiments/local-kind), and early work [in the lammps-time repository](https://github.com/converged-computing/lammps-time/tree/main/fuse/analysis) to do this that has since been turned into the library here. The next stage of work for that project will use the library here.
 
 
 ### 2. Compatibility Wrapper

@@ -56,6 +56,10 @@ def test_markov(tm_norm, test):
         # This is the path we are trying to predict
         next_path = test[i + 1]
 
+        # If we don't have information for the path, the model cannot say
+        if path not in tm_norm:
+            continue
+
         # This is the list of paths we can choose from for the next
         path_selection = tm_norm.loc[path].index.tolist()
 
@@ -165,7 +169,7 @@ def build_timeseries_matrix(df, train):
             time_in_states[last_path][path] = mean_time
             last_path = path
 
-    ts_df = pandas.DataFrame(0, index=unique_paths, columns=unique_paths)
+    ts_df = pandas.DataFrame(0.0, index=unique_paths, columns=unique_paths)
     for path1, items in time_in_states.items():
         for path2, time_in_state in items.items():
             ts_df.loc[path1, path2] = time_in_state

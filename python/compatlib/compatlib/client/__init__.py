@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
 import argparse
+import os
 import sys
 
 import compatlib
+from compatlib.logger import setup_logger
 
 
 def get_parser():
@@ -15,6 +17,23 @@ def get_parser():
         "--version",
         dest="version",
         help="show software version.",
+        default=False,
+        action="store_true",
+    )
+
+    # Global Variables
+    parser.add_argument(
+        "--debug",
+        dest="debug",
+        help="use verbose logging to debug.",
+        default=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--quiet",
+        dest="quiet",
+        help="suppress additional output.",
         default=False,
         action="store_true",
     )
@@ -44,6 +63,7 @@ def get_parser():
         "-s",
         "--suffix",
         help='Output suffix to replace (defaults to ".out")',
+        default=".out",
     )
 
     plot_recording = subparsers.add_parser(
@@ -72,6 +92,13 @@ def get_parser():
         )
         command.add_argument("--name", help="Application name", default="LAMMPS")
 
+    for command in analyze_recording, plot_recording:
+        command.add_argument(
+            "--cmap",
+            help="Colormap to use for plots",
+            default="tab20b",
+        )
+
     return parser
 
 
@@ -91,6 +118,14 @@ def run_compatlib():
 
     # If an error occurs while parsing the arguments, the interpreter will exit with value 2
     args, extra = parser.parse_known_args()
+
+    if args.debug is True:
+        os.environ["MESSAGELEVEL"] = "DEBUG"
+
+    setup_logger(
+        quiet=args.quiet,
+        debug=args.debug,
+    )
 
     # Show the version and exit
     if args.command == "version" or args.version:
@@ -113,7 +148,7 @@ def run_compatlib():
     if args.command == "plot-recording":
         from .plot_recording import main
     if args.command == "run-models":
-        from .run_models import main
+        from .models import main
 
     # Pass on to the correct parser
     return_code = 0

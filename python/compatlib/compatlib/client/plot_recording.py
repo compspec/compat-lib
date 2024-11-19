@@ -56,7 +56,7 @@ def main(args, parser, extra, subparser):
 
     plt.figure(figsize=(20, 20))
     df.index = [os.path.basename(x) for x in df.index]
-    sns.clustermap(df, mask=(df == 0.0), cmap="tab20b")
+    sns.clustermap(df, mask=(df == 0.0), cmap=args.cmap)
 
     if args.n is not None:
         save_path = f"{args.name}-top-{args.n}-recorded-paths.png"

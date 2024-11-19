@@ -36,7 +36,15 @@ if __name__ == "__main__":
         long_description_content_type="text/markdown",
         keywords="fuse, filesystem, recorder, compatibility",
         setup_requires=["pytest-runner"],
-        install_requires=["pyyaml", "networkx", "numpy", "seaborn", "pandas", "matplotlib"],
+        install_requires=[
+            "pyyaml",
+            "networkx",
+            "numpy",
+            "seaborn",
+            "pandas",
+            "matplotlib",
+            "scipy",
+        ],
         classifiers=[
             "Intended Audience :: Science/Research",
             "Intended Audience :: Developers",
