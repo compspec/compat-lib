@@ -16,6 +16,7 @@ import (
 // We need to implement a custom LoopbackNode Open function
 var _ = (fs.NodeOpener)((*CompatLoopbackNode)(nil))
 var _ = (fs.NodeLookuper)((*CompatLoopbackNode)(nil))
+var _ = (fs.NodeFlusher)((*CompatLoopbackNode)(nil))
 
 type CompatLoopbackNode struct {
 	fs.LoopbackNode
@@ -38,6 +39,14 @@ func (n *CompatLoopbackNode) Lookup(ctx context.Context, name string, out *fuse.
 	node := newNode(n.RootData, n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, idFromStat(n.RootData, &st))
 	return ch, 0
+}
+
+// Flush is called for the close(2) call, could be multiple times. See:
+// https://github.com/hanwen/go-fuse/blob/aff07cbd88fef6a2561a87a1e43255516ba7d4b6/fs/api.go#L369
+func (n *CompatLoopbackNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
+	p := n.path()
+	logger.LogEvent("Close", p)
+	return 0
 }
 
 // https://github.com/hanwen/go-fuse/blob/f5b6d1b67f4a4d0f4c3c88b4491185b3685e8383/fs/loopback.go#L48

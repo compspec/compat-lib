@@ -83,8 +83,13 @@ def get_parser():
         description="Build models for fs recordings",
         formatter_class=argparse.RawTextHelpFormatter,
     )
+    perfetto = subparsers.add_parser(
+        "to-perfetto",
+        description="generate perfetto recording for events",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
 
-    for command in analyze_recording, plot_recording, run_models:
+    for command in analyze_recording, plot_recording, run_models, perfetto:
         command.add_argument(
             "-d",
             "--outdir",
@@ -149,6 +154,8 @@ def run_compatlib():
         from .plot_recording import main
     if args.command == "run-models":
         from .models import main
+    if args.command == "to-perfetto":
+        from .perfetto import main
 
     # Pass on to the correct parser
     return_code = 0
