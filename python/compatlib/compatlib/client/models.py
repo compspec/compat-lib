@@ -4,7 +4,7 @@ from itertools import cycle
 import matplotlib.pylab as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-import compatlib.model as models
+import compatlib.models.markov as models
 from compatlib.logger import logger
 from compatlib.traces import TraceSet
 

@@ -23,7 +23,6 @@ def main(args, parser, extra, subparser):
 
     # A trace set is a collection of event files
     traceset = TraceSet(events)
-    df = traceset.to_dataframe()
 
     # Define output files and paths
     image_outdir = os.path.join(args.outdir, "img")
@@ -34,9 +33,10 @@ def main(args, parser, extra, subparser):
     # Tell the user where the stuff is going!
     logger.info(f"Output will be saved to: {args.outdir}")
     logger.info(f"              🎨 Images: {image_outdir}")
-    logger.info(f"              ⏲️ Events: {events_csv}")
+    logger.info(f"              ⏲️  Events: {events_csv}")
 
-    df.to_csv(args.event_csv)
+    df = traceset.to_dataframe()
+    df.to_csv(events_csv)
 
     # This is a distance matrix
     sims = traceset.distance_matrix()
@@ -50,10 +50,10 @@ def main(args, parser, extra, subparser):
         sims.columns = [x.replace(args.prefix, "") for x in sims.columns]
 
     plt.figure(figsize=(20, 20))
-    sns.clustermap(sims.astype(float), mask=(sims == 0.0), cmap="tab20b")
+    sns.clustermap(sims.astype(float), mask=(sims == 0.0), cmap=args.cmap)
 
     # Save all the things!
-    plot_path = os.path.join(args.outdir, f"{args.name}-levenstein-distance-matrix.png")
+    plot_path = os.path.join(image_outdir, f"{args.name}-levenstein-distance-matrix.png")
     title = (
         f"Levenstein Distance of File Access for {total_events} Recorded {args.name} Release Runs"
     )
