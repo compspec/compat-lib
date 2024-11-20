@@ -2,11 +2,14 @@ package fs
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/compspec/compat-lib/pkg/logger"
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -34,11 +37,18 @@ func (n *CompatLoopbackNode) Lookup(ctx context.Context, name string, out *fuse.
 	if err != nil {
 		return nil, fs.ToErrno(err)
 	}
+	// Stat has the following:
+	// Dev     Ino      Nlink Mode  Uid Gid X_pad Rdev Size  Blksize Blocks  Atim          Mtim           Ctim                   X_unused
+	//{2097217 13408317 1     41471 0   0   0     0    18    4096    0      {1633012128 0} {1633012128 0} {1732061992 277100520} [0 0 0]}
 	logger.LogEvent("Lookup", p)
 	out.Attr.FromStat(&st)
 	node := newNode(n.RootData, n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, idFromStat(n.RootData, &st))
 	return ch, 0
+}
+
+func GetUnexportedField(field reflect.Value) interface{} {
+	return reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface()
 }
 
 // Flush is called for the close(2) call, could be multiple times. See:
@@ -78,8 +88,20 @@ func (n *CompatLoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHan
 	flags = flags &^ syscall.O_APPEND
 	p := n.path()
 	logger.LogEvent("Open", p)
-	fh, flags, errno := n.LoopbackNode.Open(ctx, flags)
-	return fh, flags, errno
+
+	// This next section emulates:
+	// 	fh, flags, errno := n.LoopbackNode.Open(ctx, flags)
+	// But we unwrap to get the fd (file descriptor) to uniquely identify
+	fd, err := syscall.Open(p, int(flags), 0)
+	if err != nil {
+		return nil, 0, fs.ToErrno(err)
+	}
+
+	fmt.Printf("Open %d", fd)
+	loopbackFile := fs.NewLoopbackFile(fd)
+
+	// fh, flags, errno
+	return loopbackFile, 0, 0
 }
 
 func (n *CompatLoopbackNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {

@@ -109,6 +109,7 @@ def build_and_test_markov_with_times(df, train, test, left_out):
     residuals = {}
     for result in results["transitions-correct"]:
         from_state, to_state = result
+        to_state = str(to_state)
         # if the states are the same path, there is no change of state
         if from_state == to_state:
             continue
@@ -118,6 +119,10 @@ def build_and_test_markov_with_times(df, train, test, left_out):
         predicted_time = dist.rvs(size=1)[0]
         subset = test_df[test_df.normalized_path == to_state]
         subset = subset[subset.previous_path == from_state]
+
+        # We don't have that transition, cannot include it
+        if subset.shape[0] == 0:
+            continue
         actual_time = subset.ms_in_state.values[0]
 
         # End of series

@@ -59,14 +59,12 @@ class TraceSet:
 
         # We will thread the pids as the different runs of lammps,
         # and the thread ids as the library ids
-
-        # TODO: this can be cleaned up and moved into own perfetto.py
-        # I won't do this until I've added the close event and tested again
         with open(outfile, "w") as fd:
             fd.write("[")
 
             for pid, tag in enumerate(df.basename.unique()):
                 subset = df[df.basename == tag]
+                subset = subset[subset.function == "Open"]
 
                 # Subtract the minimum timestamp for each run so we always start at 0
                 start_time = subset.timestamp.min()
@@ -122,9 +120,12 @@ class TraceSet:
                     fd.write("\n")
             fd.write("]")
 
-    def iter_events(self, operation="Open"):
+    def iter_events(self, operations=None):
         """
         Iterate through files and yield event object
+
+        This function by default yields all event types, and 
+        it is up to the calling client to filter down to those of interest.
         """
         for filename in self.files:
             basename = os.path.basename(filename)
@@ -134,7 +135,9 @@ class TraceSet:
                 # date, time, golang-file  timestamp function path
                 # 2024/11/08 10:46:19 recorder.go:46: 1731062779714551943 Lookup     /etc
                 parts = [x for x in line.split() if x]
-                if parts[-2] != operation:
+
+                # Custom filter for event types
+                if operations is not None and parts[-2] not in operations:
                     continue
                 yield Event(
                     filename=filename,
@@ -145,7 +148,7 @@ class TraceSet:
                     normalized_path=utils.normalize_soname(parts[-1]),
                 )
 
-    def to_dataframe(self, operation="Open"):
+    def to_dataframe(self, operations=None):
         """
         Create a data frame of lookup values, we can save for later and derive paths from it.
 
@@ -169,7 +172,20 @@ class TraceSet:
         previous_timestamp = None
         previous_path = None
         current = None
-        for event in self.iter_events(operation=operation):
+
+        # Keep a lookup of paths that are opened, the intention being that they will be closed
+        # This is a best effort because we don't currently have unique file handles
+        opened = {}
+
+        # By default, not providing any operations will yield all operations.
+        for event in self.iter_events(operations=operations):
+
+            # Complete indicates the end of the application run, the close of the last event
+            if event.function == "Complete":
+                df.loc[idx - 1, "ms_in_state"] = event.timestamp - df.loc[idx-1, "timestamp"]
+                opened = {}
+                continue
+                
             normalized_path = utils.normalize_soname(event.path)
             df.loc[idx, :] = [
                 event.filename,
@@ -181,12 +197,25 @@ class TraceSet:
                 event.timestamp,
                 None,
             ]
+            # If it's an open, save it
+            previous_timestamp = None
+            if event.function == "Open":
+                if normalized_path not in opened:
+                    opened[normalized_path]= []
+                opened[normalized_path].append(event)
+
+            # If it's a close, match with the first corresponding open
+            elif event.function == "Close":
+                if normalized_path in opened and opened[normalized_path]:
+                    previous_open = opened[normalized_path].pop(0)
+                    previous_timestamp = event.timestamp - previous_open.timestamp
+
+            if previous_timestamp is not None:
+                df.loc[idx - 1, "ms_in_state"] = previous_timestamp
+
             if current is not None and event.filename != current:
                 previous_path = None
-                previous_timestamp = None
-            if previous_timestamp is not None:
-                df.loc[idx - 1, "ms_in_state"] = event.timestamp - previous_timestamp
-            previous_timestamp = event.timestamp
+                opened = {}
             previous_path = normalized_path
             current = event.filename
             idx += 1
@@ -195,6 +224,8 @@ class TraceSet:
     def distance_matrix(self, operation="Open"):
         """
         Generate pairwise distance matrix for paths
+
+        By default, we assume the operation of interest is the open.
         """
         lookup = self.as_paths(operation=operation)
         names = list(lookup.keys())
@@ -230,7 +261,7 @@ class TraceSet:
         Return lists of paths (lookup) corresponding to traces.
         """
         lookup = {}
-        for event in self.iter_events(operation=operation):
+        for event in self.iter_events(operations=[operation]):
             key = event.basename
             if fullpath:
                 key = event.filename
@@ -250,7 +281,7 @@ class TraceSet:
         sorted.
         """
         lookup = {}
-        for event in self.iter_events(operation=operation):
+        for event in self.iter_events(operations=[operation]):
             path = event.path
             if remove_so_version:
                 path = event.normalized_path
@@ -264,7 +295,7 @@ class TraceSet:
         Return lookup of counts corresponding to traces.
         """
         lookup = {}
-        for event in self.iter_events(operation=operation):
+        for event in self.iter_events(operations=[operation]):
             key = event.basename
             if fullpath:
                 key = event.filename
