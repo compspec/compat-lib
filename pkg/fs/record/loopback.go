@@ -2,6 +2,7 @@ package record
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -36,6 +37,9 @@ type AllFileOps interface {
 	fs.FileWriter
 	fs.FileFlusher
 }
+
+// We use this wrapperFile type to hold the file handle
+// This way we can make a direct association between open and close
 type wrapperFile struct {
 	AllFileOps
 	Fid int
@@ -66,7 +70,11 @@ func GetUnexportedField(field reflect.Value) interface{} {
 // https://github.com/hanwen/go-fuse/blob/aff07cbd88fef6a2561a87a1e43255516ba7d4b6/fs/api.go#L369
 func (n *LoopbackNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	p := n.path()
-	logger.LogEvent("Close", p)
+	wf, ok := fh.(*wrapperFile)
+	if !ok {
+		fmt.Printf("Warning: cannot serialize %s back to wrapped file, this should not happen\n", p)
+	}
+	logger.LogEvent("Close", fmt.Sprintf("%s\t%d", p, wf.Fid))
 	return 0
 }
 
@@ -98,7 +106,6 @@ func (n *LoopbackNode) root() *fs.Inode {
 func (n *LoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	flags = flags &^ syscall.O_APPEND
 	p := n.path()
-	logger.LogEvent("Open", p)
 
 	// This next section emulates:
 	// 	fh, flags, errno := n.LoopbackNode.Open(ctx, flags)
@@ -107,8 +114,7 @@ func (n *LoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, u
 	if err != nil {
 		return nil, 0, fs.ToErrno(err)
 	}
-
-	// fmt.Printf("Open %d\n", fd)
+	logger.LogEvent("Open", fmt.Sprintf("%s\t%d", p, fd))
 	loopbackFile := fs.NewLoopbackFile(fd)
 	fh := &wrapperFile{
 		AllFileOps: loopbackFile.(AllFileOps),

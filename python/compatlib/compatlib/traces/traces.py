@@ -114,12 +114,17 @@ class TraceSet:
                 # Custom filter for event types
                 if operations is not None and parts[-2] not in operations:
                     continue
+                # If we have a file descriptor, it's an open or close
+                file_descriptor = None
+                if len(parts) > 6:
+                    file_descriptor = parts[6]
                 yield Event(
                     filename=filename,
                     basename=basename,
                     function=parts[-2],
                     path=parts[-1],
                     timestamp=int(parts[-3]),
+                    file_descriptor=file_descriptor,
                     normalized_path=utils.normalize_soname(parts[-1]),
                 )
 
@@ -141,14 +146,14 @@ class TraceSet:
                 "previous_path",
                 "timestamp",
                 "ms_in_state",
+                "file_descriptor",
             ]
         )
         idx = 0
         previous_path = None
         current = None
 
-        # Keep a lookup of paths that are opened, the intention being that they will be closed
-        # This is a best effort because we don't currently have unique file handles
+        # Keep a lookup of file descriptors to associate open and close events
         opened = {}
 
         # By default, not providing any operations will yield all operations.
@@ -170,21 +175,33 @@ class TraceSet:
                 normalized_path,
                 previous_path,
                 event.timestamp,
+                event.file_descriptor,
                 None,
             ]
             # If it's an open, save it - open has to happen before close
             if event.function == "Open":
-                if normalized_path not in opened:
-                    opened[normalized_path] = []
-                opened[normalized_path].append(event)
+                if event.file_descriptor is None:
+                    raise ValueError(
+                        f"Open without file descriptor for {event.path}. This should not happen"
+                    )
+                if event.file_descriptor in opened:
+                    raise ValueError(
+                        f"File descriptor {event.file_descriptor} for {event.path} was already used. This should not happen"
+                    )
+                opened[event.file_descriptor] = event
 
             # If it's a close, match with the first corresponding open
             elif event.function == "Close":
-                if normalized_path in opened and opened[normalized_path]:
-                    previous_open = opened[normalized_path].pop(0)
-                    df.loc[previous_open.idx, "ms_in_state"] = (
-                        event.timestamp - previous_open.timestamp
+                if event.file_descriptor is None:
+                    raise ValueError(
+                        f"Close (Flush) without file descriptor for {event.path}. This should not happen"
                     )
+                if event.file_descriptor not in opened:
+                    raise ValueError(
+                        f"File descriptor {event.file_descriptor} for {event.path} not known. This should not happen"
+                    )
+                previous_open = opened[event.file_descriptor]
+                df.loc[previous_open.idx, "ms_in_state"] = event.timestamp - previous_open.timestamp
 
             if current is not None and event.filename != current:
                 previous_path = None
