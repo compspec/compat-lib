@@ -1,4 +1,3 @@
-import json
 import os
 
 import pandas
@@ -44,7 +43,7 @@ class TraceSet:
             events.append(filename)
         self.files = events
 
-    def to_perfetto(self, outfile):
+    def to_perfetto(self):
         """
         Generate perfetto json output file for events.
 
@@ -56,75 +55,52 @@ class TraceSet:
         # Give an arbitrary id to each filename
         ids = {}
         count = 0
+        events = []
 
         # We will thread the pids as the different runs of lammps,
         # and the thread ids as the library ids
+        for pid, tag in enumerate(df.basename.unique()):
+            subset = df[df.basename == tag]
+            subset = subset[subset.function == "Open"]
 
-        # TODO: this can be cleaned up and moved into own perfetto.py
-        # I won't do this until I've added the close event and tested again
-        with open(outfile, "w") as fd:
-            fd.write("[")
+            # Subtract the minimum timestamp for each run so we always start at 0
+            start_time = subset.timestamp.min()
+            subset.loc[:, "timestamp"] = subset.timestamp - start_time
 
-            for pid, tag in enumerate(df.basename.unique()):
-                subset = df[df.basename == tag]
+            for row in subset.iterrows():
+                # Get a faux process id
+                if row[1].normalized_path not in ids:
+                    ids[row[1].normalized_path] = count
+                    count += 1
+                identifier = ids[row[1].normalized_path]
+                # Only write stateful events
+                if row[1].ms_in_state is not None:
+                    events.append(
+                        {
+                            "name": row[1].normalized_path,
+                            "pid": pid,
+                            "tid": identifier,
+                            "ts": row[1].timestamp,
+                            "dur": row[1].ms_in_state,
+                            # Beginning of phase event
+                            "ph": "X",
+                            "cat": tag,
+                            "args": {
+                                "name": row[1].normalized_path,
+                                "path": row[1].path,
+                                "result": row[1].basename,
+                                "function": row[1].function,
+                            },
+                        }
+                    )
+        return events
 
-                # Subtract the minimum timestamp for each run so we always start at 0
-                start_time = subset.timestamp.min()
-                subset.loc[:, "timestamp"] = subset.timestamp - start_time
-
-                for row in subset.iterrows():
-                    # Get a faux process id
-                    if row[1].normalized_path not in ids:
-                        ids[row[1].normalized_path] = count
-                        count += 1
-                    identifier = ids[row[1].normalized_path]
-                    if row[1].ms_in_state is not None:
-                        fd.write(
-                            json.dumps(
-                                {
-                                    "name": row[1].normalized_path,
-                                    "pid": pid,
-                                    "tid": identifier,
-                                    "ts": row[1].timestamp,
-                                    "dur": row[1].ms_in_state,
-                                    # Beginning of phase event
-                                    "ph": "X",
-                                    "cat": tag,
-                                    "args": {
-                                        "name": row[1].normalized_path,
-                                        "path": row[1].path,
-                                        "result": row[1].basename,
-                                        "function": row[1].function,
-                                    },
-                                }
-                            )
-                        )
-                    else:
-                        fd.write(
-                            json.dumps(
-                                {
-                                    "name": row[1].normalized_path,
-                                    "pid": pid,
-                                    "tid": identifier,
-                                    "ts": row[1].timestamp,
-                                    # Beginning of phase event
-                                    "ph": "B",
-                                    "cat": tag,
-                                    "args": {
-                                        "name": row[1].normalized_path,
-                                        "path": row[1].path,
-                                        "result": row[1].basename,
-                                        "function": row[1].function,
-                                    },
-                                }
-                            )
-                        )
-                    fd.write("\n")
-            fd.write("]")
-
-    def iter_events(self, operation="Open"):
+    def iter_events(self, operations=None):
         """
         Iterate through files and yield event object
+
+        This function by default yields all event types, and
+        it is up to the calling client to filter down to those of interest.
         """
         for filename in self.files:
             basename = os.path.basename(filename)
@@ -134,18 +110,25 @@ class TraceSet:
                 # date, time, golang-file  timestamp function path
                 # 2024/11/08 10:46:19 recorder.go:46: 1731062779714551943 Lookup     /etc
                 parts = [x for x in line.split() if x]
-                if parts[-2] != operation:
+
+                # Custom filter for event types
+                if operations is not None and parts[-2] not in operations:
                     continue
+                # If we have a file descriptor, it's an open or close
+                file_descriptor = None
+                if len(parts) > 6:
+                    file_descriptor = parts[6]
                 yield Event(
                     filename=filename,
                     basename=basename,
                     function=parts[-2],
                     path=parts[-1],
                     timestamp=int(parts[-3]),
+                    file_descriptor=file_descriptor,
                     normalized_path=utils.normalize_soname(parts[-1]),
                 )
 
-    def to_dataframe(self, operation="Open"):
+    def to_dataframe(self, operations=None):
         """
         Create a data frame of lookup values, we can save for later and derive paths from it.
 
@@ -163,13 +146,26 @@ class TraceSet:
                 "previous_path",
                 "timestamp",
                 "ms_in_state",
+                "file_descriptor",
             ]
         )
         idx = 0
-        previous_timestamp = None
         previous_path = None
         current = None
-        for event in self.iter_events(operation=operation):
+
+        # Keep a lookup of file descriptors to associate open and close events
+        opened = {}
+
+        # By default, not providing any operations will yield all operations.
+        for event in self.iter_events(operations=operations):
+            # Complete indicates the end of the application run, the close of the last event
+            if event.function == "Complete":
+                previous_path = None
+                opened = {}
+                continue
+
+            # Store the dataframe index on the event
+            event.idx = idx
             normalized_path = utils.normalize_soname(event.path)
             df.loc[idx, :] = [
                 event.filename,
@@ -179,14 +175,37 @@ class TraceSet:
                 normalized_path,
                 previous_path,
                 event.timestamp,
+                event.file_descriptor,
                 None,
             ]
+            # If it's an open, save it - open has to happen before close
+            if event.function == "Open":
+                if event.file_descriptor is None:
+                    raise ValueError(
+                        f"Open without file descriptor for {event.path}. This should not happen"
+                    )
+                if event.file_descriptor in opened:
+                    raise ValueError(
+                        f"File descriptor {event.file_descriptor} for {event.path} was already used. This should not happen"
+                    )
+                opened[event.file_descriptor] = event
+
+            # If it's a close, match with the first corresponding open
+            elif event.function == "Close":
+                if event.file_descriptor is None:
+                    raise ValueError(
+                        f"Close (Flush) without file descriptor for {event.path}. This should not happen"
+                    )
+                if event.file_descriptor not in opened:
+                    raise ValueError(
+                        f"File descriptor {event.file_descriptor} for {event.path} not known. This should not happen"
+                    )
+                previous_open = opened[event.file_descriptor]
+                df.loc[previous_open.idx, "ms_in_state"] = event.timestamp - previous_open.timestamp
+
             if current is not None and event.filename != current:
                 previous_path = None
-                previous_timestamp = None
-            if previous_timestamp is not None:
-                df.loc[idx - 1, "ms_in_state"] = event.timestamp - previous_timestamp
-            previous_timestamp = event.timestamp
+                opened = {}
             previous_path = normalized_path
             current = event.filename
             idx += 1
@@ -195,6 +214,8 @@ class TraceSet:
     def distance_matrix(self, operation="Open"):
         """
         Generate pairwise distance matrix for paths
+
+        By default, we assume the operation of interest is the open.
         """
         lookup = self.as_paths(operation=operation)
         names = list(lookup.keys())
@@ -230,7 +251,7 @@ class TraceSet:
         Return lists of paths (lookup) corresponding to traces.
         """
         lookup = {}
-        for event in self.iter_events(operation=operation):
+        for event in self.iter_events(operations=[operation]):
             key = event.basename
             if fullpath:
                 key = event.filename
@@ -250,7 +271,7 @@ class TraceSet:
         sorted.
         """
         lookup = {}
-        for event in self.iter_events(operation=operation):
+        for event in self.iter_events(operations=[operation]):
             path = event.path
             if remove_so_version:
                 path = event.normalized_path
@@ -264,7 +285,7 @@ class TraceSet:
         Return lookup of counts corresponding to traces.
         """
         lookup = {}
-        for event in self.iter_events(operation=operation):
+        for event in self.iter_events(operations=[operation]):
             key = event.basename
             if fullpath:
                 key = event.filename

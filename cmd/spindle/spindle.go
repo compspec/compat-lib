@@ -6,17 +6,18 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
-	"github.com/compspec/compat-lib/pkg/fs"
+	fs "github.com/compspec/compat-lib/pkg/fs/spindle"
 	"github.com/compspec/compat-lib/pkg/generate"
+	"github.com/compspec/compat-lib/pkg/utils"
 )
 
 func main() {
 	fmt.Println("⭐️ Compatibility Filesystem (fs-gen)")
 	mountPoint := flag.String("mount-path", "", "Mount path (for control from calling process)")
+	readOnly := flag.Bool("read-only", true, "Read only mode (off by default)")
 
 	flag.Parse()
 	args := flag.Args()
@@ -27,13 +28,16 @@ func main() {
 
 	// Get the full path of the command
 	path := args[0]
-	path, err := filepath.Abs(path)
+	path, err := utils.FullPath(path)
 	if err != nil {
 		log.Fatalf("Error getting full path: %x", err)
-
 	}
+	// Ensure paths at 0 is fullpath
+	args[0] = path
 
 	// This is where we should look them up in some cache
+	// This isn't currently used, but we would likely have a view of the system
+	// that can do some kind of pre-cache thing...
 	fmt.Printf("Preparing to find shared libraries needed for %s\n", args)
 	_, err = generate.FindSharedLibs(path)
 	if err != nil {
@@ -41,31 +45,33 @@ func main() {
 	}
 
 	// Generate the fusefs server
-	compatFS, err := fs.NewCompatFS(mountPath, "")
+	sfs, err := fs.NewSpindleFS(mountPath, "", *readOnly)
 	if err != nil {
 		log.Panicf("Cannot generate fuse server: %x", err)
 	}
 	fmt.Println("Mounted!")
 
 	// Removes mount point directory when done
-	defer compatFS.Cleanup()
+	defer sfs.Cleanup()
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		compatFS.Server.Unmount()
+		sfs.Server.Unmount()
 	}()
 
 	// Execute the command with proot
-	proot := []string{"proot", "-S", compatFS.MountPoint, "-0"}
+	proot := []string{"proot", "-S", sfs.MountPoint, "-0"}
 	args = append(proot, args...)
 	call := strings.Join(args, " ")
 	fmt.Println(call)
-	err = compatFS.RunCommand(call)
+	err = sfs.RunCommand(call)
 	if err != nil {
 		log.Panicf("Error running command: %s", err)
 	}
-	defer compatFS.Server.Unmount()
-	compatFS.Server.Wait()
+
+	// Unlike compat, explicitly close after command is done running
+	fmt.Println("Command is done running")
+	sfs.Server.Unmount()
 }

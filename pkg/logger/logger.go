@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -46,13 +47,20 @@ func GetEventFile(outdir string) string {
 }
 
 // logEvent logs the event to file with a unix nano timeseconds
-func LogEvent(event, path string) {
+// and some arbitrary number of string arguments
+func LogEvent(args ...string) {
+	event, args := args[0], args[1:]
+
 	// Cut out early if we didn't define a log file
 	if Outfile == "" {
 		return
 	}
+	prefix := fmt.Sprintf("%d %-*s", time.Now().UnixNano(), 10, event)
+	for _, arg := range args {
+		prefix += fmt.Sprintf("%-*s", 10, arg)
+	}
 	logger := getLogger()
-	logger.Printf("%d %-*s %s\n", time.Now().UnixNano(), 10, event, path)
+	logger.Println(prefix)
 }
 
 func getLogger() *log.Logger {

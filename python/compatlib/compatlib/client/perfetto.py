@@ -1,3 +1,4 @@
+import json
 import os
 
 from compatlib.logger import logger
@@ -27,4 +28,10 @@ def main(args, parser, extra, subparser):
     traceset = TraceSet(events)
     if not traceset.files:
         logger.exit("No event files were found.")
-    traceset.to_perfetto(outfile)
+
+    # Write in a more compact form
+    with open(outfile, "w") as fd:
+        fd.write("[\n")
+        for event in traceset.to_perfetto():
+            fd.write(json.dumps(event) + "\n")
+        fd.write("]")
