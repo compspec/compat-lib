@@ -26,9 +26,9 @@ jobs:
         run: |
           export PATH=$PWD/bin:$PATH
           mkdir -p ./bin
-          go build -o ./bin/fs-gen cmd/fs/fs.go
+          go build -o ./bin/spindle cmd/spindle/spindle.go
+          go build -o ./bin/spindle-server cmd/server/server.go
           go build -o ./bin/compat-gen cmd/gen/gen.go
-          go build -o ./bin/compat-server cmd/server/server.go
           go build -o ./bin/compat-cli cmd/client/client.go
           go build -o ./bin/fs-record cmd/record/record.go
 
@@ -39,9 +39,9 @@ jobs:
           tag_name: ${{ env.tag }}
           body: "compat-lib release ${{ env.tag }}"
           files: |
-            bin/fs-gen
+            bin/spindle
+            bin/spindle-server
             bin/compat-gen
-            bin/compat-server
             bin/compat-cli
             bin/fs-record
         env:
