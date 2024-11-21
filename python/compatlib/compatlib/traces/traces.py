@@ -110,10 +110,16 @@ class TraceSet:
                 # date, time, golang-file  timestamp function path
                 # 2024/11/08 10:46:19 recorder.go:46: 1731062779714551943 Lookup     /etc
                 parts = [x for x in line.split() if x]
+                function = parts[4]
 
                 # Custom filter for event types
-                if operations is not None and parts[-2] not in operations:
+                if operations is not None and function not in operations:
                     continue
+
+                # Path will also be normalized to remove so version
+                path = parts[5]
+                timestamp = int(parts[3])
+
                 # If we have a file descriptor, it's an open or close
                 file_descriptor = None
                 if len(parts) > 6:
@@ -121,11 +127,11 @@ class TraceSet:
                 yield Event(
                     filename=filename,
                     basename=basename,
-                    function=parts[-2],
-                    path=parts[-1],
-                    timestamp=int(parts[-3]),
+                    function=function,
+                    path=path,
+                    timestamp=timestamp,
                     file_descriptor=file_descriptor,
-                    normalized_path=utils.normalize_soname(parts[-1]),
+                    normalized_path=utils.normalize_soname(path),
                 )
 
     def to_dataframe(self, operations=None):
@@ -175,8 +181,8 @@ class TraceSet:
                 normalized_path,
                 previous_path,
                 event.timestamp,
-                event.file_descriptor,
                 None,
+                event.file_descriptor,
             ]
             # If it's an open, save it - open has to happen before close
             if event.function == "Open":
