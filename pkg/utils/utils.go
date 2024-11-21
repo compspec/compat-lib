@@ -7,6 +7,8 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -20,6 +22,20 @@ func PathExists(path string) (bool, error) {
 		return true, fmt.Errorf("warning: exists but another error happened (debug): %s", err)
 	}
 	return true, nil
+}
+
+// FullPath gets a full executable path, and makes it absolute
+func FullPath(path string) (string, error) {
+	path, err := exec.LookPath(path)
+	if err != nil {
+		return "", err
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return "", err
+
+	}
+	return path, nil
 }
 
 // chunkify a count of processors across sockets

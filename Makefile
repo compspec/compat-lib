@@ -12,9 +12,9 @@ all: build
 .PHONY: build
 build:
 	mkdir -p ./bin
-	go build -o ./bin/fs-gen cmd/fs/fs.go
+	go build -o ./bin/spindle cmd/spindle/spindle.go
+	go build -o ./bin/spindle-server cmd/server/server.go
 	go build -o ./bin/compat-gen cmd/gen/gen.go
-	go build -o ./bin/compat-server cmd/server/server.go
 	go build -o ./bin/compat-cli cmd/client/client.go
 	go build -o ./bin/fs-record cmd/record/record.go
 

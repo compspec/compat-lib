@@ -1,4 +1,3 @@
-import json
 import os
 
 import pandas
@@ -44,7 +43,7 @@ class TraceSet:
             events.append(filename)
         self.files = events
 
-    def to_perfetto(self, outfile):
+    def to_perfetto(self):
         """
         Generate perfetto json output file for events.
 
@@ -56,75 +55,51 @@ class TraceSet:
         # Give an arbitrary id to each filename
         ids = {}
         count = 0
+        events = []
 
         # We will thread the pids as the different runs of lammps,
         # and the thread ids as the library ids
-        with open(outfile, "w") as fd:
-            fd.write("[")
+        for pid, tag in enumerate(df.basename.unique()):
+            subset = df[df.basename == tag]
+            subset = subset[subset.function == "Open"]
 
-            for pid, tag in enumerate(df.basename.unique()):
-                subset = df[df.basename == tag]
-                subset = subset[subset.function == "Open"]
+            # Subtract the minimum timestamp for each run so we always start at 0
+            start_time = subset.timestamp.min()
+            subset.loc[:, "timestamp"] = subset.timestamp - start_time
 
-                # Subtract the minimum timestamp for each run so we always start at 0
-                start_time = subset.timestamp.min()
-                subset.loc[:, "timestamp"] = subset.timestamp - start_time
-
-                for row in subset.iterrows():
-                    # Get a faux process id
-                    if row[1].normalized_path not in ids:
-                        ids[row[1].normalized_path] = count
-                        count += 1
-                    identifier = ids[row[1].normalized_path]
-                    if row[1].ms_in_state is not None:
-                        fd.write(
-                            json.dumps(
-                                {
-                                    "name": row[1].normalized_path,
-                                    "pid": pid,
-                                    "tid": identifier,
-                                    "ts": row[1].timestamp,
-                                    "dur": row[1].ms_in_state,
-                                    # Beginning of phase event
-                                    "ph": "X",
-                                    "cat": tag,
-                                    "args": {
-                                        "name": row[1].normalized_path,
-                                        "path": row[1].path,
-                                        "result": row[1].basename,
-                                        "function": row[1].function,
-                                    },
-                                }
-                            )
-                        )
-                    else:
-                        fd.write(
-                            json.dumps(
-                                {
-                                    "name": row[1].normalized_path,
-                                    "pid": pid,
-                                    "tid": identifier,
-                                    "ts": row[1].timestamp,
-                                    # Beginning of phase event
-                                    "ph": "B",
-                                    "cat": tag,
-                                    "args": {
-                                        "name": row[1].normalized_path,
-                                        "path": row[1].path,
-                                        "result": row[1].basename,
-                                        "function": row[1].function,
-                                    },
-                                }
-                            )
-                        )
-                    fd.write("\n")
-            fd.write("]")
+            for row in subset.iterrows():
+                # Get a faux process id
+                if row[1].normalized_path not in ids:
+                    ids[row[1].normalized_path] = count
+                    count += 1
+                identifier = ids[row[1].normalized_path]
+                # Only write stateful events
+                if row[1].ms_in_state is not None:
+                    events.append(
+                        {
+                            "name": row[1].normalized_path,
+                            "pid": pid,
+                            "tid": identifier,
+                            "ts": row[1].timestamp,
+                            "dur": row[1].ms_in_state,
+                            # Beginning of phase event
+                            "ph": "X",
+                            "cat": tag,
+                            "args": {
+                                "name": row[1].normalized_path,
+                                "path": row[1].path,
+                                "result": row[1].basename,
+                                "function": row[1].function,
+                            },
+                        }
+                    )
+        return events
 
     def iter_events(self, operations=None):
         """
         Iterate through files and yield event object
 
-        This function by default yields all event types, and 
+        This function by default yields all event types, and
         it is up to the calling client to filter down to those of interest.
         """
         for filename in self.files:
@@ -169,7 +144,6 @@ class TraceSet:
             ]
         )
         idx = 0
-        previous_timestamp = None
         previous_path = None
         current = None
 
@@ -179,13 +153,14 @@ class TraceSet:
 
         # By default, not providing any operations will yield all operations.
         for event in self.iter_events(operations=operations):
-
             # Complete indicates the end of the application run, the close of the last event
             if event.function == "Complete":
-                df.loc[idx - 1, "ms_in_state"] = event.timestamp - df.loc[idx-1, "timestamp"]
+                previous_path = None
                 opened = {}
                 continue
-                
+
+            # Store the dataframe index on the event
+            event.idx = idx
             normalized_path = utils.normalize_soname(event.path)
             df.loc[idx, :] = [
                 event.filename,
@@ -197,21 +172,19 @@ class TraceSet:
                 event.timestamp,
                 None,
             ]
-            # If it's an open, save it
-            previous_timestamp = None
+            # If it's an open, save it - open has to happen before close
             if event.function == "Open":
                 if normalized_path not in opened:
-                    opened[normalized_path]= []
+                    opened[normalized_path] = []
                 opened[normalized_path].append(event)
 
             # If it's a close, match with the first corresponding open
             elif event.function == "Close":
                 if normalized_path in opened and opened[normalized_path]:
                     previous_open = opened[normalized_path].pop(0)
-                    previous_timestamp = event.timestamp - previous_open.timestamp
-
-            if previous_timestamp is not None:
-                df.loc[idx - 1, "ms_in_state"] = previous_timestamp
+                    df.loc[previous_open.idx, "ms_in_state"] = (
+                        event.timestamp - previous_open.timestamp
+                    )
 
             if current is not None and event.filename != current:
                 previous_path = None

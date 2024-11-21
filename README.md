@@ -7,7 +7,7 @@ are several tools packaged here:
 
 - **fs-record**: records events (paths and timestamps) that occur when you run an application. Since this is run with fuse (in user space) it can work on a local machine (a binary directly) or via a container! This was the third project I created here that I ultimately find the most interesting.
 - **compat-gen**: is a tool that records library (or generally software) loading when you run a binary, and generates a compatibility artifact.
-- **fs-gen**: is a library discovery wrapper. It was the original prototype that I created to emulate [spindle](https://github.com/hpc/Spindle) and I need to have discussion with the spindle developers about what they would like to do next! It was paramount for me to learn how to use fuse to write custom events (and further understand the [SOCI snapshotter](https://youtu.be/ZXM1gP4goP8?si=MokyPbLl95nN8Un9)).
+- **spindle** and **spindle-server**: are a library discovery wrapper and server to distribute the cache across nodes, respectively. It was the original prototype that I created to emulate [spindle](https://github.com/hpc/Spindle) and I need to have discussion with the spindle developers about what they would like to do next! It was paramount for me to learn how to use fuse to write custom events (and further understand the [SOCI snapshotter](https://youtu.be/ZXM1gP4goP8?si=MokyPbLl95nN8Un9)).
 
 
 ## Usage
@@ -52,10 +52,10 @@ Test running in a container, and binding the binary!
 docker run -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1 lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
 
 # Now record!
-docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/fuse --cap-add SYS_ADMIN -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1-fuse /compat/fs-record --out /compat/lammps-run-1.out lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
+docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/fuse --cap-add SYS_ADMIN -it ghcr.io/converged-computing/lammps-time-fuse:stable_29Aug2024_update1 /compat/fs-record --out /compat/lammps-run-1.out lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
 
 # With a temporary file in the PWD
-docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/fuse --cap-add SYS_ADMIN -it ghcr.io/converged-computing/lammps-time:stable_29Aug2024_update1-fuse /compat/fs-record --out-dir /compat lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
+docker run -v $PWD/bin:/compat --security-opt apparmor:unconfined --device /dev/fuse --cap-add SYS_ADMIN -it ghcr.io/converged-computing/lammps-time-fuse:stable_29Aug2024_update1 /compat/fs-record --out-dir /compat lmp -v x 2 -v y 2 -v z 2 -in ./in.reaxff.hns -nocite
 ```
 
 We provide functions in Python under [python/compatlib](python/compatlib) for parsing and generating models for the event files. You can see using the library [here](https://github.com/converged-computing/lammps-time/tree/main/experiments/local-kind), and early work [in the lammps-time repository](https://github.com/converged-computing/lammps-time/tree/main/fuse/analysis) to do this that has since been turned into the library here. The next stage of work for that project will use the library here.
@@ -119,9 +119,9 @@ To run the server:
 2024/10/13 17:58:41 server listening: [::]:50051
 ```
 
-### 3. Library Discovery Wrapper
+### 3. Library Discovery Wrapper (spindle)
 
-> **fs-gen** to figure out what shared libraries are needed via an open intercept
+> **spindle** to figure out what shared libraries are needed via an open intercept, and **spindle-server** to distribute the cache across nodes.
 
 This was the experiment to generate something akin to spindle. I think it still has feet, I just got interested in other things more. Next I need to create some kind of cache. We can:
 
@@ -131,21 +131,24 @@ This was the experiment to generate something akin to spindle. I think it still 
 4. Use proot (or similar, I used proot since I don't want to use root) to execute a command to our mounted filesystem
 5. Then execute the binary, see the open calls.
 
-We would want to see that the exercise of not needing to do the search speeds up that loading time. If it does, it would make sense to pre-package this metadata with the binary for some registry to use. Here is how to run it with a binary:
+We would want to see that the exercise of not needing to do the search speeds up that loading time. If it does, it would make sense to pre-package this metadata with the binary for some registry to use.  Here is how to run it with a binary:
 
 ```bash
-./bin/fs-gen /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz --help
+./bin/spindle /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz --help
 ```
 
 This one has a few more paths:
 
 ```bash
-./bin/fs-gen /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/hwloc-2.11.1-zuv2etx7sgd5yn6khpblfw6qjh54lpsp/bin/hwloc-ls
+./bin/spindle /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/hwloc-2.11.1-zuv2etx7sgd5yn6khpblfw6qjh54lpsp/bin/hwloc-ls
+```
+
+```bash
+./bin/spindle sleep 2
 ```
 
 Next we would want to add some kind of cache to store file descriptors (or paths) and return something else.
 This could also be used in a compatibility context to figure out what a binary needs before running it, and give it to a scheduler, but I'm not sure that use case is of interest.
-
 
 
 ## License

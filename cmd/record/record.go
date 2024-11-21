@@ -6,12 +6,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
-	"github.com/compspec/compat-lib/pkg/fs"
+	fs "github.com/compspec/compat-lib/pkg/fs/record"
 	"github.com/compspec/compat-lib/pkg/logger"
+	"github.com/compspec/compat-lib/pkg/utils"
 )
 
 func main() {
@@ -20,6 +20,7 @@ func main() {
 	mountPoint := flag.String("mount-path", "", "Mount path (for control from calling process)")
 	outfile := flag.String("out", "", "Output file to write events")
 	outdir := flag.String("out-dir", "", "Output directory to write events")
+	readOnly := flag.Bool("read-only", true, "Read only mode (off by default)")
 
 	flag.Parse()
 	args := flag.Args()
@@ -30,10 +31,9 @@ func main() {
 
 	// Get the full path of the command
 	path := args[0]
-	_, err := filepath.Abs(path)
+	path, err := utils.FullPath(path)
 	if err != nil {
 		log.Fatalf("Error getting full path: %x", err)
-
 	}
 	args[0] = path
 
@@ -42,7 +42,7 @@ func main() {
 		*outfile = logger.GetEventFile(*outdir)
 	}
 	// Generate the fusefs server
-	compatFS, err := fs.NewCompatFS(mountPath, *outfile)
+	rfs, err := fs.NewRecordFS(mountPath, *outfile, *readOnly)
 	if err != nil {
 		log.Panicf("Cannot generate fuse server: %x", err)
 	}
@@ -50,21 +50,21 @@ func main() {
 
 	// Removes mount point directory when done
 	// Also fixes permission of file
-	defer compatFS.Cleanup()
+	defer rfs.Cleanup()
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		compatFS.Server.Unmount()
+		rfs.Server.Unmount()
 	}()
 
 	// Execute the command with proot
-	proot := []string{"proot", "-S", compatFS.MountPoint, "-0"}
+	proot := []string{"proot", "-S", rfs.MountPoint, "-0"}
 	args = append(proot, args...)
 	call := strings.Join(args, " ")
 	fmt.Println(call)
-	err = compatFS.RunCommand(call)
+	err = rfs.RunCommand(call)
 
 	// Record the end of command event.
 	logger.LogEvent("Complete", logger.Outfile)
@@ -73,5 +73,5 @@ func main() {
 	}
 	// Unlike compat, explicitly close after command is done running
 	fmt.Println("Command is done running")
-	compatFS.Server.Unmount()
+	rfs.Server.Unmount()
 }
