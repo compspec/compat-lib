@@ -54,6 +54,11 @@ func main() {
 	// Removes mount point directory when done
 	defer sfs.Cleanup()
 
+	here, err := os.Getwd()
+	if err != nil {
+		log.Panicf("Cannot get current working directory: %x", err)
+	}
+
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -61,8 +66,8 @@ func main() {
 		sfs.Server.Unmount()
 	}()
 
-	// Execute the command with proot
-	proot := []string{"proot", "-S", sfs.MountPoint, "-0"}
+	// Execute the command with proot, w is for pwd/cwd
+	proot := []string{"proot", "-S", sfs.MountPoint, "--kill-on-exit", "-w", here}
 	args = append(proot, args...)
 	call := strings.Join(args, " ")
 	fmt.Println(call)
