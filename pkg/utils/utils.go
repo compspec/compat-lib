@@ -84,6 +84,21 @@ func LookupValue(
 	return value, fmt.Errorf("cannot find any keys in %s", keys)
 }
 
+// CopyFile copies a source to a destination
+// and ensures the parent directory exists
+func CopyFile(src, dest string) error {
+	//fmt.Printf("Copying %s to %s\n", src, dest)
+	input, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(filepath.Dir(dest), 0755)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dest, input, 0644)
+}
+
 // ArrayContainsString determines if a string is in an array
 // We return an array of invalid names in case the calling function needs
 func StringArrayIsSubset(contenders, items []string) ([]string, bool) {

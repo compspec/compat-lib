@@ -1,4 +1,4 @@
-package spindle
+package slim
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ var cache = map[string]string{}
 // Hack to store global mount point
 var mountRoot = ""
 
-type SpindleFS struct {
+type SlimFS struct {
 	Server *fuse.Server
 	// Mountpoint has /root and /cache under it
 	MountPoint string
@@ -34,17 +34,17 @@ type SpindleFS struct {
 }
 
 // RootFS returns the path in the root under the mountpoint
-func (sfs *SpindleFS) RootFS() string {
+func (sfs *SlimFS) RootFS() string {
 	return filepath.Join(sfs.MountPoint, defaults.DefaultRootFS)
 }
 
 // CacheFS returns the path in the cache under the mountpoint
-func (sfs *SpindleFS) CacheFS() string {
+func (sfs *SlimFS) CacheFS() string {
 	return filepath.Join(sfs.MountPoint, defaults.DefaultCacheFS)
 }
 
 // Cleanup removes the mountpoint directory
-func (sfs *SpindleFS) Cleanup(keepCache bool) {
+func (sfs *SlimFS) Cleanup(keepCache bool) {
 
 	// Clean up mount point directory, including root and cache
 	if !keepCache {
@@ -64,30 +64,30 @@ func (sfs *SpindleFS) Cleanup(keepCache bool) {
 }
 
 // MountedPath returns the path in the context of the fuse mount.
-func (sfs *SpindleFS) MountedPath(path string) string {
+func (sfs *SlimFS) MountedPath(path string) string {
 	return filepath.Join(sfs.RootFS(), path)
 }
 
-// NewSpindleFS returns a new wrapper to a fuse.Server
+// NewSlimFS returns a new wrapper to a fuse.Server
 // We mount a fusefs to a temporary directory
 // The server returned (if not nil) needs to be
 // correctly handled - see how it is used here in the library
 // If recorder is true, we instantiate a recording base
-func NewSpindleFS(
+func NewSlimFS(
 	mountPath string,
 	recordFile string,
 	readOnly bool,
-) (*SpindleFS, error) {
+) (*SlimFS, error) {
 
 	// Create a Compat Filesystem with defaults
-	sfs := SpindleFS{Outfile: logger.Outfile}
+	sfs := SlimFS{Outfile: logger.Outfile}
 
 	// Set the global log file in case we are recording events
 	logger.SetOutfile(recordFile)
 
 	// TODO keep track of cpu and memory profiles
 	if mountPath == "" {
-		mountPoint, err := os.MkdirTemp("", "spindle")
+		mountPoint, err := os.MkdirTemp("", "slim")
 		if err != nil {
 			return nil, err
 		}
@@ -97,7 +97,7 @@ func NewSpindleFS(
 	mountRoot = mountPath
 
 	// Directories for the root, cache, and mount must exist
-	for _, path := range []string{sfs.RootFS(), sfs.CacheFS(), mountPath} {
+	for _, path := range []string{mountPath, sfs.RootFS(), sfs.CacheFS()} {
 		_, err := os.Stat(path)
 		if err != nil && os.IsNotExist(err) {
 			err := os.Mkdir(path, 0755)
@@ -127,7 +127,7 @@ func NewSpindleFS(
 }
 
 // RunComand to the fuse filesystem
-func (sfs *SpindleFS) RunCommand(command, workdir string) error {
+func (sfs *SlimFS) RunCommand(command, workdir string) error {
 
 	// returns list of strings
 	call, err := shlex.Split(command)

@@ -32,19 +32,6 @@ func (n *LoopbackNode) path() string {
 	return filepath.Join(n.RootData.Path, path)
 }
 
-type AllFileOps interface {
-	fs.FileReader
-	fs.FileWriter
-	fs.FileFlusher
-}
-
-// We use this wrapperFile type to hold the file handle
-// This way we can make a direct association between open and close
-type wrapperFile struct {
-	AllFileOps
-	Fid int
-}
-
 func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	p := filepath.Join(n.path(), name)
 	st := syscall.Stat_t{}
@@ -70,7 +57,7 @@ func GetUnexportedField(field reflect.Value) interface{} {
 // https://github.com/hanwen/go-fuse/blob/aff07cbd88fef6a2561a87a1e43255516ba7d4b6/fs/api.go#L369
 func (n *LoopbackNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	p := n.path()
-	wf, ok := fh.(*wrapperFile)
+	wf, ok := fh.(*defaults.WrapperFile)
 	if !ok {
 		fmt.Printf("Warning: cannot serialize %s back to wrapped file, this should not happen\n", p)
 	}
@@ -116,8 +103,8 @@ func (n *LoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, u
 	}
 	logger.LogEvent("Open", fmt.Sprintf("%s\t%d", p, fd))
 	loopbackFile := fs.NewLoopbackFile(fd)
-	fh := &wrapperFile{
-		AllFileOps: loopbackFile.(AllFileOps),
+	fh := &defaults.WrapperFile{
+		AllFileOps: loopbackFile.(defaults.AllFileOps),
 		Fid:        fd,
 	}
 
