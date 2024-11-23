@@ -46,7 +46,6 @@ func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryO
 	err := syscall.Lstat(p, &st)
 	//	logger.LogEvent("Lookup", p)
 	if err != nil {
-		logger.LogEvent("LookupNotFound", p)
 		return nil, fs.ToErrno(err)
 	}
 	err = syscall.Stat(p, &st)
