@@ -15,9 +15,17 @@ import (
 )
 
 func main() {
-	fmt.Println("⭐️ Compatibility Filesystem (fs-gen)")
-	mountPoint := flag.String("mount-path", "", "Mount path (for control from calling process)")
-	readOnly := flag.Bool("read-only", true, "Read only mode (off by default)")
+	fmt.Println("🧵 Filesystem Cache (spindle)")
+
+	// Note that most of the cache optimization happens depending on where you do the mount (and create the cache)
+	// It's using this cache that will bypass calls to the other filesystem (e.g., NFS) at least I think :)
+	mountPoint := flag.String("mount-path", "", "Mount path for fuse root and cache (created in /tmp/spindleXXXXX if does not exist)")
+	workdir := flag.String("workdir", "", "Working directory (defaults to pwd)")
+	wait := flag.Bool("wait", false, "Wait (and do not unmount) at the end (off by default)")
+	readOnly := flag.Bool("read-only", true, "Read only mode (on by default, as the layer to intercept does not need write)")
+	verbose := flag.Bool("v", false, "Run proot in verbose mode (off by default)")
+	outfile := flag.String("out", "", "Output file to write events (unset will not write anything anywhere)")
+	keepCache := flag.Bool("keep", false, "Do not cleanup the cache")
 
 	flag.Parse()
 	args := flag.Args()
@@ -32,8 +40,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error getting full path: %x", err)
 	}
-	// Ensure paths at 0 is fullpath
-	args[0] = path
 
 	// This is where we should look them up in some cache
 	// This isn't currently used, but we would likely have a view of the system
@@ -45,18 +51,32 @@ func main() {
 	}
 
 	// Generate the fusefs server
-	sfs, err := fs.NewSpindleFS(mountPath, "", *readOnly)
+	sfs, err := fs.NewSpindleFS(mountPath, *outfile, *readOnly)
 	if err != nil {
 		log.Panicf("Cannot generate fuse server: %x", err)
 	}
 	fmt.Println("Mounted!")
+	fmt.Printf("   ReadOnly: %t\n", *readOnly)
+	fmt.Printf("    Verbose: %t\n", *verbose)
+	fmt.Printf("    Cleanup: %t\n", *keepCache)
+	fmt.Printf("      Cache: %s\n", sfs.CacheFS())
+	fmt.Printf("       Root: %s\n", sfs.RootFS())
 
-	// Removes mount point directory when done
-	defer sfs.Cleanup()
+	// Scope the application to the space of the fuse mount
+	// Ensure paths at 0 is fullpath
+	mountedPath := sfs.MountedPath(path)
+	args[0] = mountedPath
 
-	here, err := os.Getwd()
-	if err != nil {
-		log.Panicf("Cannot get current working directory: %x", err)
+	// Removes mount point directo
+	defer sfs.Cleanup(*keepCache)
+
+	// Working directory to run command from
+	here := *workdir
+	if here == "" {
+		here, err = os.Getwd()
+		if err != nil {
+			log.Panicf("Cannot get current working directory: %x", err)
+		}
 	}
 
 	c := make(chan os.Signal)
@@ -66,17 +86,29 @@ func main() {
 		sfs.Server.Unmount()
 	}()
 
-	// Execute the command with proot, w is for pwd/cwd
-	proot := []string{"proot", "-S", sfs.MountPoint, "--kill-on-exit", "-w", here}
-	args = append(proot, args...)
+	// Ensure we have proot
+	proot, err := utils.FullPath("proot")
+	if err != nil {
+		log.Panicf("Cannot find proot executable: %x", err)
+	}
+
+	// Execute the command in the context of the fuse mount root
+	command := []string{proot, "-R", sfs.RootFS(), "--kill-on-exit", "-w", here}
+	if *verbose {
+		command = []string{proot, "-v", "1", "-R", sfs.RootFS(), "--kill-on-exit", "-w", here}
+	}
+	args = append(command, args...)
 	call := strings.Join(args, " ")
 	fmt.Println(call)
-	err = sfs.RunCommand(call)
+	err = sfs.RunCommand(call, here)
 	if err != nil {
 		log.Panicf("Error running command: %s", err)
 	}
 
 	// Unlike compat, explicitly close after command is done running
 	fmt.Println("Command is done running")
+	if *wait {
+		sfs.Server.Wait()
+	}
 	sfs.Server.Unmount()
 }

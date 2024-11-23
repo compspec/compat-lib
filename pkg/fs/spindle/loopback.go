@@ -6,14 +6,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"syscall"
 	"time"
-	"unsafe"
 
 	defaults "github.com/compspec/compat-lib/pkg/fs"
 
 	"github.com/compspec/compat-lib/pkg/logger"
+	"github.com/compspec/compat-lib/pkg/utils"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -33,20 +32,25 @@ func (n *LoopbackNode) path() string {
 	return filepath.Join(n.RootData.Path, path)
 }
 
+// fauxPath returns the read only path in the root
+func (n *LoopbackNode) cachePath() string {
+	path := n.Path(n.root())
+	return filepath.Join(mountRoot, defaults.DefaultCacheFS, path)
+}
+
 // Lookup is the event when a path is being looked for. When it is found, then we see open.
 func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	p := filepath.Join(n.path(), name)
+	logger.LogEvent("Lookup", p)
 	st := syscall.Stat_t{}
 	err := syscall.Lstat(p, &st)
-	//fmt.Printf("Lookup %s\n", p)
 	//	logger.LogEvent("Lookup", p)
 	if err != nil {
-		fmt.Printf("LookupNotFound %s %s\n", p, err)
+		logger.LogEvent("LookupNotFound", p)
 		return nil, fs.ToErrno(err)
 	}
 	err = syscall.Stat(p, &st)
 	//fmt.Printf("Lookup Stat %s %d\n", p, st.Ino)
-	//	logger.LogEvent("Lookup", p)
 	if err != nil {
 		return nil, fs.ToErrno(err)
 	}
@@ -55,20 +59,15 @@ func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryO
 	// Dev     Ino      Nlink Mode  Uid Gid X_pad Rdev Size  Blksize Blocks  Atim          Mtim           Ctim                   X_unused
 	//{2097217 13408317 1     41471 0   0   0     0    18    4096    0      {1633012128 0} {1633012128 0} {1732061992 277100520} [0 0 0]}
 	//fmt.Printf("LookupFound %s %d\n", p, st)
-	//	logger.LogEvent("LookupFound", fmt.Sprintf("%d", st.Ino))
 	out.Attr.FromStat(&st)
 	node := newNode(n.RootData, n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, idFromStat(n.RootData, &st))
 	return ch, 0
 }
 
-func GetUnexportedField(field reflect.Value) interface{} {
-	return reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface()
-}
-
 func (n *LoopbackNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 	p := n.path()
-	//fmt.Printf("Readlink %s\n", p)
+	logger.LogEvent("Readlink", p)
 
 	for l := 256; ; l *= 2 {
 		buf := make([]byte, l)
@@ -77,7 +76,6 @@ func (n *LoopbackNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 		if err != nil {
 			return nil, fs.ToErrno(err)
 		}
-
 		if sz < len(buf) {
 			return buf[:sz], 0
 		}
@@ -88,7 +86,11 @@ func (n *LoopbackNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 // https://github.com/hanwen/go-fuse/blob/aff07cbd88fef6a2561a87a1e43255516ba7d4b6/fs/api.go#L369
 func (n *LoopbackNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 	p := n.path()
-	logger.LogEvent("Close", p)
+	wf, ok := fh.(*defaults.WrapperFile)
+	if !ok {
+		fmt.Printf("Warning: cannot serialize %s back to wrapped file, this should not happen\n", p)
+	}
+	logger.LogEvent("Close", fmt.Sprintf("%s\t%d", p, wf.Fid))
 	return 0
 }
 
@@ -119,23 +121,33 @@ func (n *LoopbackNode) root() *fs.Inode {
 
 func (n *LoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	flags = flags &^ syscall.O_APPEND
-	p := n.path()
-	//fmt.Printf("Open %s\n", p)
-	logger.LogEvent("Open", p)
+
+	// Copy the open to our cache (and maintain directory structure)
+	originalPath := n.path()
+	cachePath, ok := cache[originalPath]
+	if !ok {
+		cachePath = n.cachePath()
+		utils.CopyFile(originalPath, cachePath)
+		cache[originalPath] = cachePath
+	}
+	logger.LogEvent("Open", cachePath)
 
 	// This next section emulates:
 	// 	fh, flags, errno := n.LoopbackNode.Open(ctx, flags)
 	// But we unwrap to get the fd (file descriptor) to uniquely identify
-	fd, err := syscall.Open(p, int(flags), 0)
+	fd, err := syscall.Open(cachePath, int(flags), 0)
 	if err != nil {
 		return nil, 0, fs.ToErrno(err)
 	}
 
 	//fmt.Printf("OpenSuccess %s %d\n", p, fd)
 	loopbackFile := fs.NewLoopbackFile(fd)
-
+	fh := &defaults.WrapperFile{
+		AllFileOps: loopbackFile.(defaults.AllFileOps),
+		Fid:        fd,
+	}
 	// fh, flags, errno
-	return loopbackFile, 0, 0
+	return fh, 0, 0
 }
 
 func (n *LoopbackNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
@@ -155,15 +167,10 @@ func newNode(rootData *fs.LoopbackRoot, parent *fs.Inode, name string, st *sysca
 
 // InitLoopbackRoot creates a fuse.Server
 func (sfs *SpindleFS) InitLoopbackRoot(
-	rootPath, mountPoint string,
+	rootPath string,
 	updates chan Update,
 	readOnly bool,
 ) error {
-
-	rootData := &fs.LoopbackRoot{
-		NewNode: newNode,
-		Path:    rootPath,
-	}
 
 	// one second is compatible with libfuse defaults
 	// https://man7.org/linux/man-pages/man8/mount.fuse3.8.html
@@ -196,8 +203,20 @@ func (sfs *SpindleFS) InitLoopbackRoot(
 		options.Options = []string{"ro"}
 	}
 
-	// This is  going to block
-	server, err := fs.Mount(mountPoint, newNode(rootData, nil, "", nil), options)
+	var st syscall.Stat_t
+	err := syscall.Stat(rootPath, &st)
+	if err != nil {
+		return err
+	}
+
+	rootData := &fs.LoopbackRoot{
+		NewNode: newNode,
+		Path:    rootPath,
+		Dev:     uint64(st.Dev),
+	}
+
+	// This is going to block
+	server, err := fs.Mount(sfs.RootFS(), newNode(rootData, nil, "", &st), options)
 	sfs.Server = server
 	return err
 }
