@@ -22,4 +22,10 @@ const (
 
 	// Name for the loopback filesystem
 	LoopbackName = "loopback"
+
+	// Default FS root under the mountpoint
+	DefaultRootFS = "root"
+
+	// Default FS cache under the mountpoint
+	DefaultCacheFS = "cache"
 )

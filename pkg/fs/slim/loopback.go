@@ -1,4 +1,4 @@
-package spindle
+package slim
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 
 	defaults "github.com/compspec/compat-lib/pkg/fs"
 
-	"github.com/compspec/compat-lib/pkg/logger"
 	"github.com/compspec/compat-lib/pkg/utils"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -40,24 +39,28 @@ func (n *LoopbackNode) cachePath() string {
 
 // Lookup is the event when a path is being looked for. When it is found, then we see open.
 func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	p := filepath.Join(n.path(), name)
-	logger.LogEvent("Lookup", p)
+	originalPath := filepath.Join(n.path(), name)
 	st := syscall.Stat_t{}
-	err := syscall.Lstat(p, &st)
-	//	logger.LogEvent("Lookup", p)
+	err := syscall.Lstat(originalPath, &st)
 	if err != nil {
 		return nil, fs.ToErrno(err)
 	}
-	err = syscall.Stat(p, &st)
-	//fmt.Printf("Lookup Stat %s %d\n", p, st.Ino)
+	err = syscall.Stat(originalPath, &st)
 	if err != nil {
 		return nil, fs.ToErrno(err)
 	}
 
-	// Stat has the following:
-	// Dev     Ino      Nlink Mode  Uid Gid X_pad Rdev Size  Blksize Blocks  Atim          Mtim           Ctim                   X_unused
-	//{2097217 13408317 1     41471 0   0   0     0    18    4096    0      {1633012128 0} {1633012128 0} {1732061992 277100520} [0 0 0]}
-	//fmt.Printf("LookupFound %s %d\n", p, st)
+	// If the lookup file exists, cache it
+	// Commented out for now - does not work
+	/*exists, _ := utils.PathExists(originalPath)
+	if exists {
+		_, ok := cache[originalPath]
+		if !ok {
+			cachePath := n.cachePath()
+			utils.CopyFile(originalPath, cachePath)
+			cache[originalPath] = cachePath
+		}
+	}*/
 	out.Attr.FromStat(&st)
 	node := newNode(n.RootData, n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, idFromStat(n.RootData, &st))
@@ -66,7 +69,6 @@ func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryO
 
 func (n *LoopbackNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 	p := n.path()
-	logger.LogEvent("Readlink", p)
 
 	for l := 256; ; l *= 2 {
 		buf := make([]byte, l)
@@ -84,12 +86,6 @@ func (n *LoopbackNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 // Flush is called for the close(2) call, could be multiple times. See:
 // https://github.com/hanwen/go-fuse/blob/aff07cbd88fef6a2561a87a1e43255516ba7d4b6/fs/api.go#L369
 func (n *LoopbackNode) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
-	p := n.path()
-	wf, ok := fh.(*defaults.WrapperFile)
-	if !ok {
-		fmt.Printf("Warning: cannot serialize %s back to wrapped file, this should not happen\n", p)
-	}
-	logger.LogEvent("Close", fmt.Sprintf("%s\t%d", p, wf.Fid))
 	return 0
 }
 
@@ -129,7 +125,6 @@ func (n *LoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, u
 		utils.CopyFile(originalPath, cachePath)
 		cache[originalPath] = cachePath
 	}
-	logger.LogEvent("Open", cachePath)
 
 	// This next section emulates:
 	// 	fh, flags, errno := n.LoopbackNode.Open(ctx, flags)
@@ -150,7 +145,6 @@ func (n *LoopbackNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, u
 }
 
 func (n *LoopbackNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
-	logger.LogEvent("Create", name)
 	inode, fh, flags, errno := n.LoopbackNode.Create(ctx, name, flags, mode, out)
 	return inode, fh, flags, errno
 }
@@ -165,7 +159,7 @@ func newNode(rootData *fs.LoopbackRoot, parent *fs.Inode, name string, st *sysca
 }
 
 // InitLoopbackRoot creates a fuse.Server
-func (sfs *SpindleFS) InitLoopbackRoot(
+func (sfs *SlimFS) InitLoopbackRoot(
 	rootPath string,
 	updates chan Update,
 	readOnly bool,

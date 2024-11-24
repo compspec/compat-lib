@@ -9,13 +9,12 @@ import (
 	"strings"
 	"syscall"
 
-	fs "github.com/compspec/compat-lib/pkg/fs/spindle"
-	"github.com/compspec/compat-lib/pkg/generate"
+	fs "github.com/compspec/compat-lib/pkg/fs/slim"
 	"github.com/compspec/compat-lib/pkg/utils"
 )
 
 func main() {
-	fmt.Println("🧵 Filesystem Cache (spindle)")
+	fmt.Println("🥕 Container Slimmer (slim)")
 
 	// Note that most of the cache optimization happens depending on where you do the mount (and create the cache)
 	// It's using this cache that will bypass calls to the other filesystem (e.g., NFS) at least I think :)
@@ -41,17 +40,8 @@ func main() {
 		log.Fatalf("Error getting full path: %s", err)
 	}
 
-	// This is where we should look them up in some cache
-	// This isn't currently used, but we would likely have a view of the system
-	// that can do some kind of pre-cache thing...
-	fmt.Printf("Preparing to find shared libraries needed for %s\n", args)
-	_, err = generate.FindSharedLibs(path)
-	if err != nil {
-		log.Panicf("Error finding shared libraries for %s: %s", path, err)
-	}
-
 	// Generate the fusefs server
-	sfs, err := fs.NewSpindleFS(mountPath, *outfile, *readOnly)
+	sfs, err := fs.NewSlimFS(mountPath, *outfile, *readOnly)
 	if err != nil {
 		log.Panicf("Cannot generate fuse server: %s", err)
 	}
@@ -67,7 +57,8 @@ func main() {
 	mountedPath := sfs.MountedPath(path)
 	args[0] = mountedPath
 
-	// Removes mount point directo
+	// Removes mount point directory
+	// Here we keep the cache, we cannot remove
 	defer sfs.Cleanup(*keepCache)
 
 	// Working directory to run command from

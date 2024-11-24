@@ -33,7 +33,7 @@ func main() {
 	path := args[0]
 	path, err := utils.FullPath(path)
 	if err != nil {
-		log.Fatalf("Error getting full path: %x", err)
+		log.Fatalf("Error getting full path: %s", err)
 	}
 	args[0] = path
 
@@ -44,7 +44,7 @@ func main() {
 	// Generate the fusefs server
 	rfs, err := fs.NewRecordFS(mountPath, *outfile, *readOnly)
 	if err != nil {
-		log.Panicf("Cannot generate fuse server: %x", err)
+		log.Panicf("Cannot generate fuse server: %s", err)
 	}
 	fmt.Println("Mounted!")
 

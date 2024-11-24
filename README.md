@@ -123,32 +123,44 @@ To run the server:
 
 > **spindle** to figure out what shared libraries are needed via an open intercept, and **spindle-server** to distribute the cache across nodes.
 
-This was the experiment to generate something akin to spindle. I think it still has feet, I just got interested in other things more. Next I need to create some kind of cache. We can:
+This was the experiment to generate something akin to spindle. I am still learning about fuse and the best way to go about this. So far, what I do:
 
-1. Parse the ELF to get sonames needed (if we want to see them in advance, this isn't actually necessary)
-2. Generate a fuse overlay where everything will be found in one spot (no searching needed)
-3. Write a create function for a loopback filesystem that will intercept calls
-4. Use proot (or similar, I used proot since I don't want to use root) to execute a command to our mounted filesystem
-5. Then execute the binary, see the open calls.
+1. The user provides a mount point root for a root (fuse) filesystem and cache, which will be located at `/tmp/spindlexxxx`.
+  - The location of this point is important, as the cache reads will happen here and (I think) help with the optimization.
+  - The fuse loopback filesystem (meaning it redirects to the root at / for all calls) is created at `/tmp/spindlexxxx/root`
+  - A cache to copy files (that will be opened) is created at `/tmp/spindlexxxx/cache`
+2. Each Open call is intercepted, and the actual filesystem path moved to the cache, and the Open call uses the cache instead
+3. The command is run with "proot" directed at the `/tmp/spindlexxxx/root` so all calls are intercepted here
+  - I do this because when I don't use proot, I don't see the libraries trying to be loaded.
+  - This will lead to problems because it means we don't have write at the moment
+  - We need a strategy that can direct all Open calls here (to redirect to the cache) but can return to the actual FS for write, etc.
+4. I don't see "Close" (Flush) - that either means we are leaving files open, or the fuse root is not monitoring the `/tmp/spindlexxxx/cache`
 
-We would want to see that the exercise of not needing to do the search speeds up that loading time. If it does, it would make sense to pre-package this metadata with the binary for some registry to use.  Here is how to run it with a binary:
-
-```bash
-./bin/spindle /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/xz-5.4.6-klise22d77jjaoejkucrczlkvnm6f4au/bin/xz --help
-```
-
-This one has a few more paths:
-
-```bash
-./bin/spindle /home/vanessa/Desktop/Code/spack/opt/spack/linux-ubuntu24.04-zen4/gcc-13.2.0/hwloc-2.11.1-zuv2etx7sgd5yn6khpblfw6qjh54lpsp/bin/hwloc-ls
-```
+In my testing environment, given that spindle and proot are on the path, we can do:
 
 ```bash
-./bin/spindle sleep 2
+cd /opt/lammps/examples/reaxff/HNS/
+spindle lmp -v x 1 -v y 1 -v z 1 -in ./in.reaxff.hns -nocite
 ```
 
-Next we would want to add some kind of cache to store file descriptors (or paths) and return something else.
-This could also be used in a compatibility context to figure out what a binary needs before running it, and give it to a scheduler, but I'm not sure that use case is of interest.
+I added options to help with debugging (e.g., an output file for events, verbose mode for proot, and the option to `--wait` to keep it running):
+
+```console
+$ ./bin/spindle --help
+🧵 Filesystem Cache (spindle)
+Usage of ./bin/spindle:
+  -mount-path string
+        Mount path for fuse root and cache (created in /tmp/spindleXXXXX if does not exist)
+  -out string
+        Output file to write events (unset will not write anything anywhere)
+  -read-only
+        Read only mode (on by default, as the layer to intercept does not need write) (default true)
+  -v    Run proot in verbose mode (off by default)
+  -wait
+        Wait (and do not unmount) at the end (off by default)
+  -workdir string
+        Working directory (defaults to pwd)
+```
 
 
 ## License
