@@ -12,6 +12,7 @@ all: build
 .PHONY: build
 build:
 	mkdir -p ./bin
+	go build -o ./bin/slim cmd/slim/slim.go
 	go build -o ./bin/spindle cmd/spindle/spindle.go
 	go build -o ./bin/spindle-server cmd/server/server.go
 	go build -o ./bin/compat-gen cmd/gen/gen.go

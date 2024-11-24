@@ -27,14 +27,14 @@ func main() {
 	path := args[0]
 	path, err := filepath.Abs(path)
 	if err != nil {
-		log.Fatalf("Error getting full path: %x", err)
+		log.Fatalf("Error getting full path: %s", err)
 	}
 
 	// This is where we should look them up in some cache
 	fmt.Printf("Preparing to find shared libraries needed for %s\n", args)
 	libs, err := generate.FindSharedLibs(path)
 	if err != nil {
-		log.Fatalf("Error finding shared libraries for %s: %x", path, err)
+		log.Fatalf("Error finding shared libraries for %s: %s", path, err)
 	}
 
 	// Generate the artifact
