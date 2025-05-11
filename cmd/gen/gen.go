@@ -20,28 +20,31 @@ func main() {
 	outPath := *outfile
 
 	if len(args) == 0 {
-		log.Fatalf("Please provide the binary you want to generate an artifact for.")
+		log.Fatal("Please provide the binary you want to generate an artifact for.")
 	}
 
 	// Get the full path of the command
 	path := args[0]
 	path, err := filepath.Abs(path)
 	if err != nil {
-		log.Fatalf("Error getting full path: %s", err)
+		fmt.Println(err)
+		log.Fatal("Error getting full path")
 	}
 
 	// This is where we should look them up in some cache
 	fmt.Printf("Preparing to find shared libraries needed for %s\n", args)
 	libs, err := generate.FindSharedLibs(path)
 	if err != nil {
-		log.Fatalf("Error finding shared libraries for %s: %s", path, err)
+		fmt.Println(err)
+		log.Fatalf("Error finding shared libraries for %s", path)
 	}
 
 	// Generate the artifact
 	spec := compat.GenerateLibraryArtifact(path, libs)
 	out, err := spec.ToJson()
 	if err != nil {
-		log.Fatalf("Issue serializing spec to json: %s", err)
+		fmt.Println(err)
+		log.Fatalf("Issue serializing spec to json")
 	}
 	if outPath == "" {
 		fmt.Println(string(out))
@@ -49,7 +52,8 @@ func main() {
 		fmt.Printf("🗒️ Writing to file %s\n", outPath)
 		err = os.WriteFile(outPath, out, 0644)
 		if err != nil {
-			log.Fatalf("Issue writing to output file: %s", err)
+			fmt.Println(err)
+			log.Fatalf("Issue writing to output file")
 		}
 	}
 }

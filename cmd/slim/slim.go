@@ -37,13 +37,15 @@ func main() {
 	path := args[0]
 	path, err := utils.FullPath(path)
 	if err != nil {
-		log.Fatalf("Error getting full path: %s", err)
+		fmt.Println(err)
+		log.Fatalf("Error getting full path")
 	}
 
 	// Generate the fusefs server
 	sfs, err := fs.NewSlimFS(mountPath, *outfile, *readOnly)
 	if err != nil {
-		log.Panicf("Cannot generate fuse server: %s", err)
+		fmt.Println(err)
+		log.Panicf("Cannot generate fuse server")
 	}
 	fmt.Println("Mounted!")
 	fmt.Printf("   ReadOnly: %t\n", *readOnly)
@@ -66,7 +68,8 @@ func main() {
 	if here == "" {
 		here, err = os.Getwd()
 		if err != nil {
-			log.Panicf("Cannot get current working directory: %s", err)
+			fmt.Println(err)
+			log.Panicf("Cannot get current working directory")
 		}
 	}
 
@@ -80,7 +83,8 @@ func main() {
 	// Ensure we have proot
 	proot, err := utils.FullPath("proot")
 	if err != nil {
-		log.Panicf("Cannot find proot executable: %s", err)
+		fmt.Println(err)
+		log.Panicf("Cannot find proot executable")
 	}
 
 	// Execute the command in the context of the fuse mount root
@@ -93,7 +97,8 @@ func main() {
 	fmt.Println(call)
 	err = sfs.RunCommand(call, here)
 	if err != nil {
-		log.Panicf("Error running command: %s", err)
+		fmt.Println(err)
+		log.Panicf("Error running command")
 	}
 
 	// Unlike compat, explicitly close after command is done running

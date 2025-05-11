@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 
 	"github.com/compspec/compat-lib/pkg/server"
@@ -23,7 +24,8 @@ func main() {
 	s := server.NewServer(serverName)
 	log.Printf("🧩 starting compatibility server: %s", s.String())
 	if err := s.Start(context.Background(), host); err != nil {
-		log.Fatalf("error while running compatibility server: %v", err)
+		fmt.Println(err)
+		log.Fatal("error while running compatibility server")
 	}
 	log.Printf("🧩 done 🧩")
 }
