@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 
 	"github.com/compspec/compat-lib/pkg/client"
@@ -18,11 +19,12 @@ func main() {
 	args := flag.Args()
 
 	if len(args) == 0 {
-		log.Fatalf("Please provide a compatibility artifact to compare with the host.")
+		log.Fatal("Please provide a compatibility artifact to compare with the host.")
 	}
 	client, err := client.NewClient(host)
 	if err != nil {
-		log.Fatalf("Issue creating client: %s\n", err)
+		fmt.Println(err)
+		log.Fatal("Issue creating client")
 	}
 	client.CheckCompatibility(context.Background(), args[0])
 }

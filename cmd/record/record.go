@@ -25,7 +25,7 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 	if len(args) == 0 {
-		log.Fatalf("You must provide a command (with optional arguments) to run.")
+		log.Fatal("You must provide a command (with optional arguments) to run.")
 	}
 	mountPath := *mountPoint
 
@@ -33,7 +33,8 @@ func main() {
 	path := args[0]
 	path, err := utils.FullPath(path)
 	if err != nil {
-		log.Fatalf("Error getting full path: %s", err)
+		fmt.Println(err)
+		log.Fatal("error getting full path")
 	}
 	args[0] = path
 
@@ -44,7 +45,8 @@ func main() {
 	// Generate the fusefs server
 	rfs, err := fs.NewRecordFS(mountPath, *outfile, *readOnly)
 	if err != nil {
-		log.Panicf("Cannot generate fuse server: %s", err)
+		fmt.Println(err)
+		log.Panic("cannot generate fuse server")
 	}
 	fmt.Println("Mounted!")
 
@@ -69,7 +71,8 @@ func main() {
 	// Record the end of command event.
 	logger.LogEvent("Complete", logger.Outfile)
 	if err != nil {
-		log.Panicf("Error running command: %s", err)
+		fmt.Println(err)
+		log.Panic("error running command")
 	}
 	// Unlike compat, explicitly close after command is done running
 	fmt.Println("Command is done running")

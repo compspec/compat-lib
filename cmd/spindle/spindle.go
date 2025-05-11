@@ -38,7 +38,8 @@ func main() {
 	path := args[0]
 	path, err := utils.FullPath(path)
 	if err != nil {
-		log.Fatalf("Error getting full path: %s", err)
+		fmt.Println(err)
+		log.Fatalf("Error getting full path")
 	}
 
 	// This is where we should look them up in some cache
@@ -47,13 +48,15 @@ func main() {
 	fmt.Printf("Preparing to find shared libraries needed for %s\n", args)
 	_, err = generate.FindSharedLibs(path)
 	if err != nil {
-		log.Panicf("Error finding shared libraries for %s: %s", path, err)
+		fmt.Println(err)
+		log.Panicf("Error finding shared libraries for %s", path)
 	}
 
 	// Generate the fusefs server
 	sfs, err := fs.NewSpindleFS(mountPath, *outfile, *readOnly)
 	if err != nil {
-		log.Panicf("Cannot generate fuse server: %s", err)
+		fmt.Println(err)
+		log.Panicf("Cannot generate fuse server")
 	}
 	fmt.Println("Mounted!")
 	fmt.Printf("   ReadOnly: %t\n", *readOnly)
@@ -75,7 +78,8 @@ func main() {
 	if here == "" {
 		here, err = os.Getwd()
 		if err != nil {
-			log.Panicf("Cannot get current working directory: %s", err)
+			fmt.Println(err)
+			log.Panicf("Cannot get current working directory")
 		}
 	}
 
@@ -102,7 +106,8 @@ func main() {
 	fmt.Println(call)
 	err = sfs.RunCommand(call, here)
 	if err != nil {
-		log.Panicf("Error running command: %s", err)
+		fmt.Println(err)
+		log.Panicf("Error running command")
 	}
 
 	// Unlike compat, explicitly close after command is done running
