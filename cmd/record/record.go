@@ -60,11 +60,8 @@ func main() {
 	usingMPI := *mpirun
 	mountOnly := *mount
 
-	// If we are using MPI, the mount path needs to be defined for all processes to use
+	// We should eventually figure out how to do this once
 	if usingMPI {
-		if mountPath == "" {
-			log.Fatalf("For MPI, a consistent mount path must be provided for processes to share")
-		}
 		rank := getRank()
 		fmt.Printf("Found rank %s\n", rank)
 	}
