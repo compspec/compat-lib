@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	defaults "github.com/compspec/compat-lib/pkg/fs"
 	"github.com/compspec/compat-lib/pkg/logger"
@@ -36,11 +37,31 @@ func (rfs *RecordFS) Cleanup() {
 	}
 }
 
+// Determine if a path is already mounted
+func isMounted(path string) (bool, error) {
+	cmd := exec.Command("mount")
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("error executing mount command: %w", err)
+	}
+
+	mounts := strings.Split(string(output), "\n")
+	for _, mount := range mounts {
+		if strings.Contains(mount, " "+path+" ") {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // NewRecordFS returns a new wrapper to a fuse.Server
 // We mount a fusefs to a temporary directory
 // The server returned (if not nil) needs to be
 // correctly handled - see how it is used here in the library
 // If recorder is true, we instantiate a recording base
+// If skip creation is true, we assume another process
+// has created it.
 func NewRecordFS(
 	mountPath string,
 	recordFile string,
@@ -75,17 +96,27 @@ func NewRecordFS(
 
 	fmt.Printf("Mount directory %s\n", mountPath)
 	rfs.MountPoint = mountPath
+	if err != nil {
+		return nil, err
+	}
+
+	alreadyMounted, err := isMounted(mountPath)
+	if err != nil {
+		return nil, err
+	}
 
 	// Mount the content of the rootFS (originalFS) at the mount point
 	// Pass in a channel to receive updates from
-	err = rfs.InitLoopbackRoot(
-		defaults.OriginalFS,
-		mountPath,
-		updates,
-		readOnly,
-	)
-	if err != nil {
-		return nil, err
+	if !alreadyMounted {
+		err = rfs.InitLoopbackRoot(
+			defaults.OriginalFS,
+			mountPath,
+			updates,
+			readOnly,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &rfs, nil
 }
